@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+.poetry.lock
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environments
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.example
+venv/
+.venv/
+env/
+ENV/
+
+# Credentials and Secrets
+kaggle.json
+secrets.json
+
+# Node modules
+node_modules/
+
+# Large datasets (Ignore all raw and processed data except .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Large Outputs (Ignore all outputs and logs except .gitkeep)
+outputs/*
+!outputs/**/.gitkeep
+
+# System and OS files
+.DS_Store
+Thumbs.db

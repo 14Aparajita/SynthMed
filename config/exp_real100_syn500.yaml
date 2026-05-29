@@ -1,0 +1,13 @@
+data:
+  image_size: 128
+  knowledge_base_dir: data/knowledge_base
+  num_real_test: 100
+  num_real_train: 100
+  num_synthetic_images: 500
+  num_synthetic_metadata: 500
+  processed_dir: data/processed
+  raw_dir: data/raw
+experiment:
+  device: cpu
+  name: real100_syn500
+  seed: 42

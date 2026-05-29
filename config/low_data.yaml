@@ -1,0 +1,48 @@
+
+# config/low_data.yaml - Shows synthetic data benefit
+experiment:
+  name: "synthmed_low_data"
+  seed: 42
+  device: "cpu"
+
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  knowledge_base_dir: "data/knowledge_base"
+  image_size: 128
+  num_real_train: 200  # Use LESS real data to show synthetic benefit
+  num_real_test: 100
+  num_synthetic_metadata: 500  # MORE synthetic data
+  num_synthetic_images: 500
+
+schema:
+  schema_path: "config/schema/clinical_metadata.json"
+  repair_enabled: true
+  repair_max_iterations: 3
+
+retrieval:
+  embedder_model: "sentence-transformers/all-MiniLM-L6-v2"
+  top_k: 5
+  fusion_weights: [0.4, 0.3, 0.3]
+  index_path: "outputs/models/faiss_index.bin"
+
+generation:
+  metadata_model: "distilgpt2"
+  metadata_max_length: 256
+  temperature: 0.7
+  diffusion_timesteps: 100
+  diffusion_image_size: 32
+  diffusion_checkpoint: "outputs/models/diffusion_unet.pt"
+
+classifier:
+  model_name: "mobilenet_v2"
+  num_classes: 5
+  batch_size: 8
+  epochs: 50
+  learning_rate: 0.0001
+  weight_decay: 0.001
+
+evaluation:
+  metrics: ["accuracy", "f1", "roc_auc", "schema_validity", "repair_success", "grounding_score"]
+  save_results: true
+  results_path: "outputs/results"

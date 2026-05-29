@@ -1,0 +1,49 @@
+classifier:
+  batch_size: 8
+  epochs: 50
+  learning_rate: 0.0001
+  model_name: mobilenet_v2
+  num_classes: 5
+  weight_decay: 0.001
+data:
+  image_size: 128
+  knowledge_base_dir: data/knowledge_base
+  num_real_test: 550
+  num_real_train: 2564
+  num_synthetic_images: 200
+  num_synthetic_metadata: 200
+  processed_dir: data/processed
+  raw_dir: data/raw
+evaluation:
+  metrics:
+  - accuracy
+  - f1
+  - roc_auc
+  - schema_validity
+  - repair_success
+  - grounding_score
+  results_path: outputs/results
+  save_results: true
+experiment:
+  device: cpu
+  name: synthmed_improved
+  seed: 42
+generation:
+  diffusion_checkpoint: outputs/models/diffusion_unet.pt
+  diffusion_image_size: 32
+  diffusion_timesteps: 100
+  metadata_max_length: 256
+  metadata_model: distilgpt2
+  temperature: 0.7
+retrieval:
+  embedder_model: sentence-transformers/all-MiniLM-L6-v2
+  fusion_weights:
+  - 0.4
+  - 0.3
+  - 0.3
+  index_path: outputs/models/faiss_index.bin
+  top_k: 5
+schema:
+  repair_enabled: false
+  repair_max_iterations: 3
+  schema_path: config/schema/clinical_metadata.json

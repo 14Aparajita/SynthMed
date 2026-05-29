@@ -1,0 +1,30 @@
+experiments:
+  - name: "baseline_real_only"
+    synthetic_metadata: 0
+    synthetic_images: 0
+    schema_repair: false
+    rag_grounding: false
+
+  - name: "synth_metadata_only"
+    synthetic_metadata: 200
+    synthetic_images: 0
+    schema_repair: true
+    rag_grounding: true
+
+  - name: "synth_both_full"
+    synthetic_metadata: 200
+    synthetic_images: 200
+    schema_repair: true
+    rag_grounding: true
+
+  - name: "no_schema_repair"
+    synthetic_metadata: 200
+    synthetic_images: 200
+    schema_repair: false
+    rag_grounding: true
+
+  - name: "no_rag_grounding"
+    synthetic_metadata: 200
+    synthetic_images: 200
+    schema_repair: true
+    rag_grounding: false

@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DiabeticRetinopathyClinicalMetadata",
+  "type": "object",
+  "required": [
+    "patient_id",
+    "age",
+    "sex",
+    "dr_grade",
+    "image_quality",
+    "left_eye",
+    "anatomical_findings"
+  ],
+  "properties": {
+    "patient_id": {
+      "type": "string",
+      "pattern": "^P[0-9]{5}$"
+    },
+    "age": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 120
+    },
+    "sex": {
+      "type": "string",
+      "enum": ["M", "F"]
+    },
+    "dr_grade": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "0=No DR, 1=Mild, 2=Moderate, 3=Severe, 4=Proliferative"
+    },
+    "image_quality": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "left_eye": {
+      "type": "boolean"
+    },
+    "anatomical_findings": {
+      "type": "object",
+      "required": ["microaneurysms", "hemorrhages", "exudates"],
+      "properties": {
+        "microaneurysms": {
+          "type": "string",
+          "enum": ["none", "few", "moderate", "many"]
+        },
+        "hemorrhages": {
+          "type": "string",
+          "enum": ["none", "few", "moderate", "many"]
+        },
+        "exudates": {
+          "type": "string",
+          "enum": ["none", "few", "moderate", "many"]
+        },
+        "neovascularization": {
+          "type": "string",
+          "enum": ["none", "present"]
+        },
+        "macular_edema": {
+          "type": "string",
+          "enum": ["none", "present"]
+        }
+      }
+    }
+  }
+}
