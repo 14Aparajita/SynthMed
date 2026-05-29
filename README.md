@@ -163,13 +163,20 @@ Evaluation on Diabetic Retinopathy classification reveals:
 3. **Data Efficiency**: Models augmented with SynthMed achieve comparable performance to baseline models trained on significantly larger pools of real-world data.
 
 
-##Author
-**Aparajita Vaish**
-*This is the original work of the author. All rights are reserved by the author. Kindly cite the author before using it*
 
+
+---
+
+## Author
+**Aparajita Vaish**
+
+
+
+*This is the original work of the author. All rights are reserved by the author. Kindly cite the author before using it*
 
 
 ---
 
 ## 📜 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+
