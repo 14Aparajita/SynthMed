@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SynthMed - Synthetic Medical Data Generator</title>
+    <!-- CSS and Icons -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo-container">
+                <div class="logo-icon">S</div>
+                <div class="logo-text">
+                    <h1>SynthMed</h1>
+                    <p>Synthetic Medical Data Generator Dashboard</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <span class="status-dot"></span>
+                <span>Security Sandbox Active</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs-navigation">
+            <button class="tab-btn active" data-tab="generator-tab">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Interactive Generator
+            </button>
+            <button class="tab-btn" data-tab="classifier-tab">
+                <i class="fa-solid fa-microscope"></i> Clinical Classifier
+            </button>
+            <button class="tab-btn" data-tab="dashboard-tab">
+                <i class="fa-solid fa-chart-line"></i> System Dashboard
+            </button>
+        </div>
+
+        <!-- TAB 1: GENERATOR -->
+        <div id="generator-tab" class="tab-content active">
+            <div class="grid-2col">
+                <!-- Control Panel Card -->
+                <div class="card">
+                    <h2 class="card-title"><i class="fa-solid fa-sliders"></i> Synthesis Controller</h2>
+                    
+                    <!-- DR Severity Grade -->
+                    <div class="form-group">
+                        <label class="form-label">Target Severity Level</label>
+                        <div class="severity-grid">
+                            <div class="severity-opt active" data-grade="0">
+                                <div class="severity-num">0</div>
+                                <div class="severity-label">Level 0</div>
+                            </div>
+                            <div class="severity-opt" data-grade="1">
+                                <div class="severity-num">1</div>
+                                <div class="severity-label">Level 1</div>
+                            </div>
+                            <div class="severity-opt" data-grade="2">
+                                <div class="severity-num">2</div>
+                                <div class="severity-label">Level 2</div>
+                            </div>
+                            <div class="severity-opt" data-grade="3">
+                                <div class="severity-num">3</div>
+                                <div class="severity-label">Level 3</div>
+                            </div>
+                            <div class="severity-opt" data-grade="4">
+                                <div class="severity-num">4</div>
+                                <div class="severity-label">Level 4</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Temperature -->
+                    <div class="form-group" style="display:none;">
+                        <!-- Hidden to avoid exposing generator details -->
+                        <input type="range" id="temperature-slider" class="range-slider" min="0.1" max="1.5" step="0.05" value="0.7">
+                        <span id="temp-val">0.7</span>
+                    </div>
+
+                    <!-- RAG Grounding toggle -->
+                    <div class="form-group" style="display:none;">
+                        <!-- Hidden to avoid exposing grounding details -->
+                        <input type="checkbox" id="rag-toggle" checked>
+                    </div>
+
+                    <!-- Action Button -->
+                    <button id="generate-btn" class="btn-primary">
+                        <i class="fa-solid fa-gears"></i> Synthesize Patient Data Record
+                    </button>
+                    
+                    <!-- Live Pipeline Logger -->
+                    <div style="margin-top:1.5rem;">
+                        <label class="form-label">Engine Output Console</label>
+                        <div id="pipeline-logs" class="pipeline-logs">
+                            <div class="log-entry">
+                                <span class="log-time">[System]</span>
+                                <span>Select a severity level and click "Synthesize Patient Data Record" to begin.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Outputs Panel Card -->
+                <div>
+                    <!-- Pipeline Step indicators (Hidden specific names) -->
+                    <div class="pipeline-steps">
+                        <div class="step-indicator" id="step-rag">
+                            <div class="step-node">1</div>
+                            <div class="step-label">Stage 1: Prep</div>
+                        </div>
+                        <div class="step-indicator" id="step-meta">
+                            <div class="step-node">2</div>
+                            <div class="step-label">Stage 2: Structuring</div>
+                        </div>
+                        <div class="step-indicator" id="step-repair">
+                            <div class="step-node">3</div>
+                            <div class="step-label">Stage 3: Validation</div>
+                        </div>
+                        <div class="step-indicator" id="step-diff">
+                            <div class="step-node">4</div>
+                            <div class="step-label">Stage 4: Rendering</div>
+                        </div>
+                    </div>
+
+                    <!-- Main Results display -->
+                    <div class="card">
+                        <h2 class="card-title"><i class="fa-solid fa-cube"></i> Synthesized Record</h2>
+                        
+                        <div class="result-section">
+                            <!-- Image output -->
+                            <div>
+                                <label class="form-label">Synthetic Retinal Image</label>
+                                <div id="gen-image-box" class="image-display-box">
+                                    <div class="image-placeholder">
+                                        <i class="fa-solid fa-image"></i>
+                                        <span>Image output pending</span>
+                                    </div>
+                                </div>
+                                <div id="download-actions" style="margin-top:1rem; display:none; gap:0.5rem;">
+                                    <a id="download-img-btn" class="btn-primary" style="padding:0.5rem 1rem; font-size:0.9rem; width:50%;" download="synth_fundus.png">
+                                        <i class="fa-solid fa-download"></i> Image
+                                    </a>
+                                    <button id="download-json-btn" class="btn-primary" style="padding:0.5rem 1rem; font-size:0.9rem; width:50%; background:var(--bg-glass); border:1px solid var(--border-glass); color:var(--text-primary); box-shadow:none;">
+                                        <i class="fa-solid fa-file-code"></i> JSON Metadata
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- JSON metadata output -->
+                            <div style="display:flex; flex-direction:column;">
+                                <label class="form-label">Clinical Data Dictionary Schema Output</label>
+                                <div id="json-output" class="json-display">{"status": "Waiting for pipeline trigger..."}</div>
+                            </div>
+                        </div>
+
+                        <!-- Hidden grounding score & citations to keep RAG architecture secret -->
+                        <div id="score-container" style="display: none;">
+                            <span id="grounding-score-val">0.00</span>
+                        </div>
+                        <div id="citations-container" style="display:none;">
+                            <div id="citations-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: CLASSIFIER -->
+        <div id="classifier-tab" class="tab-content">
+            <div class="grid-2col">
+                <!-- Select Image Card -->
+                <div class="card">
+                    <h2 class="card-title"><i class="fa-solid fa-camera"></i> Input Photograph</h2>
+                    
+                    <!-- Drag & Drop Zone -->
+                    <div class="upload-zone" id="drag-drop-zone">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Drag and drop a fundus image here</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">or click to browse local files</span>
+                        <input type="file" id="image-upload-input" accept="image/*" style="display:none;">
+                    </div>
+
+                    <!-- Preset Samples Grid -->
+                    <label class="form-label">Select from Real Clinical Samples</label>
+                    <div class="sample-grid" id="samples-container">
+                        <!-- Loaded dynamically -->
+                    </div>
+
+                    <!-- Predict button -->
+                    <button id="classify-btn" class="btn-primary" style="margin-top:1rem;">
+                        <i class="fa-solid fa-magnifying-glass-chart"></i> Run Classifier Analysis
+                    </button>
+                </div>
+
+                <!-- Prediction Results Card -->
+                <div class="card">
+                    <h2 class="card-title"><i class="fa-solid fa-square-poll-vertical"></i> Classifier Diagnostic Output</h2>
+                    
+                    <div class="classification-result" id="classification-result-panel" style="display:none;">
+                        <!-- Top result row -->
+                        <div class="result-section" style="grid-template-columns: 1.2fr 1fr;">
+                            <!-- Preprocessed display -->
+                            <div>
+                                <label class="form-label">Enhanced Input Visual (128x128)</label>
+                                <div class="image-display-box" style="aspect-ratio: 1.2;">
+                                    <img id="classifier-preprocessed-img" src="" alt="Preprocessed Retinal Photo">
+                                </div>
+                            </div>
+                            
+                            <!-- Predicted Severity Details -->
+                            <div style="display:flex; flex-direction:column; justify-content:center; gap:1rem;">
+                                <div>
+                                    <span class="form-label">Predicted Severity Grade</span>
+                                    <div id="pred-grade-badge" class="prediction-badge grade-0">Grade 0</div>
+                                </div>
+                                <div>
+                                    <span class="form-label">Clinical Details</span>
+                                    <p id="pred-description" style="font-size:0.85rem; color:var(--text-secondary);"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Class probabilities list -->
+                        <div>
+                            <label class="form-label" style="border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.5rem; margin-bottom:1rem;">
+                                Classification Confidence Output
+                            </label>
+                            
+                            <!-- Grade 0 bar -->
+                            <div class="probability-bar-container">
+                                <div class="probability-label">
+                                    <span>Level 0</span>
+                                    <span id="prob-0-text">0.0%</span>
+                                </div>
+                                <div class="prob-track"><div id="prob-0-fill" class="prob-fill"></div></div>
+                            </div>
+                            <!-- Grade 1 bar -->
+                            <div class="probability-bar-container">
+                                <div class="probability-label">
+                                    <span>Level 1</span>
+                                    <span id="prob-1-text">0.0%</span>
+                                </div>
+                                <div class="prob-track"><div id="prob-1-fill" class="prob-fill"></div></div>
+                            </div>
+                            <!-- Grade 2 bar -->
+                            <div class="probability-bar-container">
+                                <div class="probability-label">
+                                    <span>Level 2</span>
+                                    <span id="prob-2-text">0.0%</span>
+                                </div>
+                                <div class="prob-track"><div id="prob-2-fill" class="prob-fill"></div></div>
+                            </div>
+                            <!-- Grade 3 bar -->
+                            <div class="probability-bar-container">
+                                <div class="probability-label">
+                                    <span>Level 3</span>
+                                    <span id="prob-3-text">0.0%</span>
+                                </div>
+                                <div class="prob-track"><div id="prob-3-fill" class="prob-fill"></div></div>
+                            </div>
+                            <!-- Grade 4 bar -->
+                            <div class="probability-bar-container">
+                                <div class="probability-label">
+                                    <span>Level 4</span>
+                                    <span id="prob-4-text">0.0%</span>
+                                </div>
+                                <div class="prob-track"><div id="prob-4-fill" class="prob-fill"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Waiting prompt -->
+                    <div id="classifier-placeholder" class="image-placeholder" style="height:350px;">
+                        <i class="fa-solid fa-stethoscope"></i>
+                        <span>Upload an image or pick a sample, then run classification.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: DASHBOARD -->
+        <div id="dashboard-tab" class="tab-content">
+            <!-- Metric cards row -->
+            <div class="metric-row">
+                <div class="metric-card">
+                    <div class="metric-value">6.0%</div>
+                    <div class="metric-label">Low-Resource Accuracy Boost</div>
+                </div>
+                <div class="metric-card highlight">
+                    <div class="metric-value">9.7%</div>
+                    <div class="metric-label">F1 Severity Grading Gain</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">100%</div>
+                    <div class="metric-label">Schema Compliance Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">35%</div>
+                    <div class="metric-label">Full-Data Gap Recovery</div>
+                </div>
+            </div>
+
+            <!-- Experimental Results Table -->
+            <div class="card">
+                <h2 class="card-title"><i class="fa-solid fa-chart-simple"></i> Evaluation Metrics</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Setting</th>
+                                <th>Real training samples</th>
+                                <th>Synthetic samples</th>
+                                <th>Test Accuracy</th>
+                                <th>F1 Score</th>
+                                <th>ROC-AUC</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Baseline</td>
+                                <td>100</td>
+                                <td>0</td>
+                                <td>0.680</td>
+                                <td>0.620</td>
+                                <td>0.903</td>
+                            </tr>
+                            <tr style="background: rgba(0, 242, 254, 0.04); font-weight: bold; border-left: 3px solid var(--accent);">
+                                <td>SynthMed (100+500)</td>
+                                <td>100</td>
+                                <td>500</td>
+                                <td>0.740</td>
+                                <td>0.717</td>
+                                <td>0.927</td>
+                            </tr>
+                            <tr>
+                                <td>Baseline</td>
+                                <td>200</td>
+                                <td>0</td>
+                                <td>0.720</td>
+                                <td>0.677</td>
+                                <td>0.913</td>
+                            </tr>
+                            <tr>
+                                <td>SynthMed (200+500)</td>
+                                <td>200</td>
+                                <td>500</td>
+                                <td>0.710</td>
+                                <td>0.670</td>
+                                <td>0.926</td>
+                            </tr>
+                            <tr style="border-top: 2px solid var(--border-glass);">
+                                <td>Upper Bound (Full real data)</td>
+                                <td>2000</td>
+                                <td>0</td>
+                                <td>0.850</td>
+                                <td>0.846</td>
+                                <td>0.954</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>
