@@ -1,43 +1,56 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.ipynb_checkpoints/
-.poetry.lock
-pip-log.txt
-pip-delete-this-directory.txt
+# ---- Datasets & model checkpoints ----
+data/raw/
+data/processed/
+data/knowledge_base/
+outputs/
+iclr_results/checkpoints/
+*.pt
+*.pth
+*.ckpt
 
-# Environments
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.example
-venv/
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
 .venv/
+venv/
 env/
 ENV/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Credentials and Secrets
-kaggle.json
-secrets.json
-
-# Node modules
+# ---- Node (legacy) ----
 node_modules/
+npm-debug.log
 
-# Large datasets (Ignore all raw and processed data except .gitkeep)
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-
-# Large Outputs (Ignore all outputs and logs except .gitkeep)
-outputs/*
-!outputs/**/.gitkeep
-
-# System and OS files
+# ---- IDE / OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
+
+# ---- Environment files ----
+.env
+.env.local
+.env.*.local
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Logs ----
+*.log
+outputs/logs/
+
+# ---- Credentials ----
+kaggle.json
+secrets.json

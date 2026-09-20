@@ -1,0 +1,16 @@
+{
+  "experiment_name": "synthmed_improved",
+  "accuracy": 0.8145454545454546,
+  "f1_score": 0.8106888854629151,
+  "roc_auc": 0.9321848186769884,
+  "schema_validity_rate": 1.0,
+  "repair_success_rate": 0.0,
+  "mean_grounding_score": 0.0,
+  "num_synthetic_metadata": 200,
+  "num_synthetic_images": 200,
+  "schema_repair_enabled": true,
+  "rag_grounding_enabled": true,
+  "final_train_loss": 0.6108601676340787,
+  "final_val_loss": 0.8514641778192659,
+  "training_time": 389.3770890235901
+}

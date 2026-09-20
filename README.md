@@ -1,182 +1,290 @@
-# SynthMed: Knowledge-Grounded Synthetic Medical Data Generation
+# SynthMed: Schema-Enforced Synthetic Medical Data Generation for Low-Resource Diabetic Retinopathy Classification
 
-SynthMed is a comprehensive framework designed for **Knowledge-Grounded Synthetic Medical Data Generation**, specifically tailored for Diabetic Retinopathy (DR) severity grading. It combines Retrieval-Augmented Generation (RAG), clinical metadata generation, automated schema validation and repair, and denoising diffusion image generation to construct high-fidelity, clinically sound synthetic medical datasets.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-In low-data regimes, training robust deep learning models is challenging due to the scarcity of clinical data. **SynthMed** bridges this gap by augmenting limited real-world datasets with high-fidelity, schema-validated synthetic records and corresponding medical images.
+## Overview
 
----
+Medical imaging classifiers require large labeled datasets. In low-resource clinical settings, only 100–200 labeled fundus images may be available. **SynthMed** is a dual-modality synthetic data generator that produces paired, JSON-schema-valid clinical metadata and 128×128 retinal fundus images for diabetic retinopathy (DR) classification.
 
-## 🌟 Key Features
+The system combines:
 
-1. **RAG-Fusion Clinical Grounding**: Retrieves rich context from medical knowledge bases (PubMed abstracts, clinical guidelines) using a custom RAG-Fusion pipeline to ground synthetic records in real-world clinical science.
-2. **Structured Metadata Generation & Schema Repair**: Automated LLM-based structured patient clinical metadata generation with built-in schema validation and automated repair algorithms to guarantee syntactical and logical clinical sanity.
-3. **Lightweight DDPM Image Generation**: A custom, lightweight Denoising Diffusion Probabilistic Model (DDPM) designed for 32x32 retinal fundus image generation, scalable up to 128x128 via bilinear upscaling.
-4. **Stratified Classifier Evaluation**: Downstream classification trainer designed to validate the clinical utility of the generated synthetic datasets across various low-data regimes.
-5. **Robust Configurations**: Flexible, file-based experimental configs to easily reproduce baseline, ablation, and full pipeline runs.
+- **Retrieval-augmented generation (RAG)** for grounding synthetic metadata in real clinical knowledge
+- **JSON Schema enforcement** with a bounded, rule-based repair engine
+- **Lightweight denoising diffusion (DDPM)** for synthetic fundus image generation
+- **Multi-seed statistical evaluation** to measure downstream utility
 
----
+**Key finding:** SynthMed achieves perfect structural reliability (100% schema validity, 100% repair success) but does **not** produce statistically significant classification gains at N=100 real images (multi-seed paired t-test: p = 0.214). We characterize this *validity–utility gap* and trace it to distributional mismatch between generated and real metadata.
 
-## 📐 System Architecture
+## Contributions
 
-The following diagram illustrates the complete SynthMed generation and training pipeline:
+1. A dual-modality synthetic medical data generator that produces schema-valid clinical metadata paired with synthetic fundus images.
+2. A bounded rule-based repair engine that achieves 100% repair success on injected corruption across four error classes.
+3. A multi-seed empirical evaluation (5 seeds) demonstrating that structural validity does not imply downstream utility.
+4. A distributional fidelity analysis quantifying the mismatch between generated and real metadata.
 
-```mermaid
-flowchart TD
-    subgraph RAG ["1. RAG-Fusion & Clinical Grounding"]
-        KB[(Knowledge Base)] --> Indexer[Indexer / Embedder]
-        Indexer --> Retrieve[Semantic Retrieval]
-        Query[DR Grade 0-4 Query] --> Retrieve
-        Retrieve --> Fusion[RAG-Fusion Context]
-    end
+## Method
 
-    subgraph MetaGen ["2. Structured Metadata & Schema Repair"]
-        Fusion --> LLM[LLM Generator]
-        LLM --> RawMeta[Raw Structured Metadata]
-        RawMeta --> Validator{Schema Validator}
-        Validator -- "Invalid" --> Repairer[Auto-Repair Pipeline]
-        Repairer --> Validator
-        Validator -- "Valid" --> CleanMeta[Grounded Clinical Metadata]
-    end
+The SynthMed pipeline operates in five stages:
 
-    subgraph DiffGen ["3. Medical Image Generation"]
-        CleanMeta --> DDPM[Lightweight DDPM Diffusion]
-        DDPM --> LowRes[32x32 Fundus Image]
-        LowRes --> Upscaling[Bilinear Upscaling]
-        Upscaling --> SyntheticImages[128x128 Retinal Images]
-    end
+1. **Preprocessing** — APTOS 2019 fundus images resized to 128×128, CLAHE-enhanced, saved as `.npy`.
+2. **RAG Retrieval** — A clinical knowledge base (10 documents) is embedded with `all-MiniLM-L6-v2` and indexed with FAISS. At generation time, the top-5 documents are retrieved via RAG Fusion (semantic + keyword + clinical concept search).
+3. **Metadata Generation** — `distilgpt2` generates a JSON clinical record conditioned on a target DR grade and the retrieved context. Output is parsed as JSON.
+4. **Schema Validation & Repair** — Each record is validated against a JSON Schema (Draft 7). Invalid records trigger a three-pass rule-based repair engine (structural → type → constraint), bounded at 3 iterations.
+5. **Image Generation** — A lightweight DDPM (~5M params, T=100) is trained for 20 epochs on the training images and sampled to produce 32×32 patches upscaled to 128×128.
 
-    subgraph Downstream ["4. Downstream Classifier Evaluation"]
-        SyntheticImages & CleanMeta --> DownstreamData[(Synthetic + Real Dataset)]
-        DownstreamData --> Trainer[Classifier Trainer]
-        Trainer --> Metrics[Accuracy / F1 Severity Grading]
-    end
+The classifier (MobileNetV2) is trained on combinations of real and synthetic data and evaluated on a fixed 100-image test set.
+
+## Repository Structure
+
+```text
+SynthMed/
+├── config/                         # Experiment YAML configs
+│   └── schema/                     # JSON Schema for clinical metadata
+├── experiments/                    # Core pipeline (run_pipeline.py)
+├── src/                            # Source code
+│   ├── classifier/                 # MobileNetV2 classifier and trainer
+│   ├── data/                       # Preprocessing, datasets, augmentation
+│   ├── evaluation/                 # Metrics and reporting
+│   ├── generation/                 # DDPM, metadata generator, grounding
+│   ├── retrieval/                  # FAISS index, embeddings, RAG Fusion
+│   ├── schema/                     # Validator and repairer
+│   └── utils/                      # Config, logging, seeding
+├── scripts/                        # Utility scripts
+├── tests/                          # Unit tests
+├── run_caisc_experiments.py        # Final experiment runner
+├── run_multiseed.py                # Multi-seed runner
+└── iclr_results/                   # Final results package
+    ├── figures/
+    ├── metrics/
+    └── tables/
 ```
 
----
-
-## 📂 Project Structure
-
-```
-synthmed/
-│
-├── config/                  # Experiment YAML configuration files
-│   ├── default.yaml         # Base setup configuration
-│   └── schema/              # Metadata JSON schema rules
-│       └── clinical_metadata.json
-│
-├── data/                    # Dataset directories (ignored by git, kept via .gitkeep)
-│   ├── knowledge_base/      # PubMed abstracts and clinical guidelines
-│   ├── raw/                 # Original real-world clinical records & fundus images
-│   └── processed/           # Preprocessed dataset splits & .npy arrays
-│
-├── src/                     # Core python codebase
-│   ├── classifier/          # Downstream neural network classifier modules
-│   ├── data/                # Preprocessing, data augmentations, and dataset loaders
-│   ├── evaluation/          # Evaluation metrics and report generators
-│   ├── generation/          # DDPM Diffusion, metadata generator, & RAG grounding
-│   ├── retrieval/           # RAG indexers, embedders, and fusion algorithms
-│   ├── schema/              # Metadata validation and auto-repair pipelines
-│   └── utils/               # Common helper utilities, logging, and seed initializers
-│
-├── tests/                   # Test suite for verifying core pipeline modules
-│
-├── README.md                # Project documentation
-├── requirements.txt         # Python dependencies
-├── setup.py                 # Setuptools installer
-├── package.json             # Node dependencies (if applicable)
-├── verify.py                # Dataset integrity verification script
-└── run_final_experiment.py  # Script for executing CAISC experiments
-```
-
----
-
-## 🚀 Setup & Installation
+## Environment Setup
 
 ### Prerequisites
-* Python `3.9` or higher
-* Node.js (if utilizing JS-based generation scripts)
 
-### Installation Steps
+- Python 3.9 or higher
+- CUDA-capable GPU (optional; CPU fallback supported)
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/14Aparajita/SynthMed.git
-   cd SynthMed
-   ```
+### Installation
 
-2. **Set up a Virtual Environment**:
-   ```bash
-   python -m venv venv
-   # On Windows:
-   venv\Scripts\activate
-   # On Unix/macOS:
-   source venv/bin/activate
-   ```
-
-3. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   pip install -e .
-   ```
-
-4. **Install Node dependencies** (if using the JS-based generation helpers):
-   ```bash
-   npm install
-   ```
-
-5. **Set up Environment Variables**:
-   Copy `.env.example` to `.env` and fill in your API credentials (e.g. OpenAI/Anthropic/Kaggle keys if needed):
-   ```bash
-   cp .env.example .env
-   ```
-
----
-
-## 💻 Usage Guide
-
-### 1. Data Integrity Verification
-To verify that your raw datasets are correctly situated and formatted, run:
 ```bash
-python verify.py
+git clone https://github.com/14Aparajita/SynthMed.git
+cd SynthMed
+python -m venv venv
 ```
 
-### 2. Running the Complete Experiment
-To execute the CAISC experiment comparing classification accuracy across baseline and synthetic-augmented datasets, execute:
-```bash
-python run_final_experiment.py
-```
-This script runs a structured sweep across multiple real training sizes (`[100, 200, 500]`) and synthetic dataset sizes (`[0, 200, 500, 1000]`) and logs detailed outcomes.
+**Windows:**
 
-### 3. Running Unit Tests
-To verify individual modules (e.g., schema validation, retrieval indexing, or diffusion model sampling):
 ```bash
-pytest tests/
+venv\Scripts\activate
 ```
 
----
+**Linux/macOS:**
 
-## 📈 Key Findings & Observed Trends
+```bash
+source venv/bin/activate
+```
 
-Evaluation on Diabetic Retinopathy classification reveals:
-1. **Low-Data Boost**: In highly restricted regimes (e.g., 100 real clinical samples), augmenting with SynthMed's grounded synthetic data provides the most significant classification accuracy improvements.
-2. **Fidelity-Efficiency Tradeoff**: Validated and auto-repaired patient metadata coupled with grounded image upscaling produces robust feature representation without overfitting.
-3. **Data Efficiency**: Models augmented with SynthMed achieve comparable performance to baseline models trained on significantly larger pools of real-world data.
+Install dependencies:
 
+```bash
+pip install -r requirements.txt
+pip install -e .
+```
 
+## Dataset
 
+The experiments use the **APTOS 2019 Blindness Detection** dataset, publicly available on Kaggle.
 
----
+```bash
+kaggle competitions download -c aptos2019-blindness-detection
+```
+
+### Data Preprocessing
+
+Place the downloaded images in `data/raw/` and run:
+
+```python
+from src.data.preprocess import preprocess_images
+
+preprocess_images(
+    "data/raw",
+    "data/processed",
+    128
+)
+```
+
+The pipeline expects `data/raw/clinical.csv` with the following columns:
+
+- `image_id`
+- `image_path`
+- `dr_grade`
+- `split`
+
+A helper script generates a fixed stratified test set of 100 images:
+
+```text
+data/processed/fixed_test_ids.csv
+```
+
+### Knowledge Base
+
+A default 10-document clinical knowledge base is bundled in `run_pipeline.py`.
+
+To build a custom knowledge base:
+
+```bash
+python scripts/build_kb.py
+```
+
+## Running the Project
+
+### Full Single-Seed Experiment Suite
+
+```bash
+python run_caisc_experiments.py
+```
+
+Runs A1–A8, B1, B2, C1 and saves results to:
+
+```text
+outputs/results/caisc_final_results_<timestamp>.csv
+```
+
+### Multi-Seed Evaluation (A1, A2, A8)
+
+```bash
+python run_multiseed.py
+```
+
+Runs seeds 42–46 for A1, A2, and A8.
+
+Outputs:
+
+```text
+outputs/results/multiseed_summary.csv
+outputs/results/multiseed_raw.csv
+```
+
+### Reliability Analysis
+
+```bash
+python scripts/save_synthetic_metadata.py
+python scripts/distributional_fidelity.py
+```
+
+Generates:
+
+```text
+outputs/results/synthetic_metadata_A2.jsonl
+iclr_results/metrics/distributional_fidelity.csv
+```
+
+### Figure and Table Generation
+
+```bash
+python iclr_results/figures/generate_pipeline_diagram.py
+python iclr_results/figures/generate_final_figures.py
+python iclr_results/figures/generate_distributional_figure.py
+python scripts/build_final_table.py
+```
+
+## Experiments
+
+The final experiment set:
+
+| ID | Configuration | Real | Synthetic |
+|---|---|---:|---:|
+| A1 | Real-only baseline | 100 | 0 |
+| A2 | SynthMed (full) | 100 | 500 |
+| A3 | No repair | 100 | 500 |
+| A4 | No RAG | 100 | 500 |
+| A5 | Image-only diffusion | 100 | 500 images |
+| A6 | Conditional DDPM | 100 | 500 |
+| A8 | Heavy geometric augmentation | 100 | 0 |
+| B1 | Baseline 200 | 200 | 0 |
+| B2 | SynthMed 200 | 200 | 500 |
+| C1 | Upper bound | 2000 | 0 |
+| A2+fusion | Metadata late-fusion | 100 | 500 |
+
+## Results
+
+### Reliability
+
+| Metric | Value | n |
+|---|---:|---:|
+| Schema validity rate | **1.000** | 500 |
+| Repair success rate (injected corruption) | **1.000** | 100 |
+
+### Classification (Multi-Seed, 5 seeds)
+
+| Configuration | Accuracy (mean ± std) | F1 | ROC-AUC |
+|---|---:|---:|---:|
+| A1 (real only) | 0.678 ± 0.018 | 0.638 | 0.877 |
+| A2 (SynthMed) | 0.628 ± 0.092 | 0.579 | 0.818 |
+| A8 (geometric aug) | 0.672 ± 0.022 | 0.635 | 0.886 |
+
+### Paired t-tests
+
+- A2 vs A1: t = −1.474, **p = 0.214** (not significant)
+- A8 vs A1: t = −0.408, **p = 0.704** (not significant)
+
+### Distributional Fidelity
+
+| Field | JS Divergence |
+|---|---:|
+| Age | **0.70** |
+| Image quality | **0.83** |
+
+### Metadata Fusion
+
+A2 with metadata late-fusion achieves **0.610 accuracy**, compared with **0.628** for image-only A2. Metadata fusion does not improve downstream performance at N=100.
+
+## Reproducibility
+
+- **Seeds:** 42 (single-seed), 42–46 (multi-seed)
+- **Test set:** Fixed stratified 100 images (`data/processed/fixed_test_ids.csv`)
+- **Configs:** All hyperparameters in `config/exp_*.yaml`
+- **Outputs:** `outputs/results/` and `iclr_results/`
+- **Determinism:** `set_seed()` is called at the start of every pipeline run
+
+## Figures and Tables
+
+| Artifact | Path |
+|---|---|
+| Pipeline diagram | `iclr_results/figures/fig_pipeline.png` |
+| Reliability bar chart | `iclr_results/figures/fig_reliability.png` |
+| Multi-seed accuracy | `iclr_results/figures/fig_multiseed.png` |
+| Distributional mismatch | `iclr_results/figures/fig_distributional_mismatch.png` |
+| Main results table | `iclr_results/tables/main_results.csv` |
+
+## Limitations
+
+- Single dataset (APTOS 2019); no cross-dataset generalization.
+- Grounding score was not reliably recorded (logged as 0.0 in all runs).
+- Repair engine was never triggered on real generations (100% first-pass valid).
+- Synthetic images are low-resolution (32×32 upscaled to 128×128).
+- No image fidelity metric (FID/KID) was computed.
+- Metadata fusion degrades performance at N=100.
+
+## Citation
+
+```bibtex
+@misc{vaish2026synthmed,
+  title={SynthMed: Schema-Enforced Synthetic Medical Data Generation for Low-Resource Diabetic Retinopathy Classification},
+  author={Vaish, Aparajita},
+  year={2026},
+  howpublished={\url{https://github.com/14Aparajita/SynthMed}}
+}
+```
+
+*Note: Update this citation when the paper is published.*
 
 ## Author
+
 **Aparajita Vaish**
 
+## License
 
-
-*This is the original work of the author. All rights are reserved by the author. Kindly cite the author before using it*
-
-
----
-
-## 📜 License
-This project is licensed under the MIT License - see the LICENSE file for details.
-
+This project is licensed under the MIT License — see the `LICENSE` file for details.

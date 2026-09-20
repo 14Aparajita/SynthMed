@@ -1,0 +1,98 @@
+[
+  {
+    "experiment": "A1_baseline_100real",
+    "description": "Baseline: 100 real samples only",
+    "n_real": 100,
+    "n_synthetic": 0,
+    "accuracy": 0.75,
+    "f1_score": 0.7220954859497476,
+    "roc_auc": 0.8941840095573458,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 48.7532594203949
+  },
+  {
+    "experiment": "A2_synthmed_100real_500syn",
+    "description": "SynthMed: 100 real + 500 synthetic",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.64,
+    "f1_score": 0.6038230240549829,
+    "roc_auc": 0.835351990707362,
+    "repair_enabled": true,
+    "rag_enabled": true,
+    "training_time": 928.1726169586182
+  },
+  {
+    "experiment": "A3_norepair_100real_500syn",
+    "description": "Ablation: No schema repair",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.64,
+    "f1_score": 0.6038230240549829,
+    "roc_auc": 0.835351990707362,
+    "repair_enabled": false,
+    "rag_enabled": true,
+    "training_time": 954.2905790805817
+  },
+  {
+    "experiment": "A4_norag_100real_500syn",
+    "description": "Ablation: No RAG grounding",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.67,
+    "f1_score": 0.602219755826859,
+    "roc_auc": 0.8560891713600063,
+    "repair_enabled": true,
+    "rag_enabled": false,
+    "training_time": 886.0582191944122
+  },
+  {
+    "experiment": "B1_baseline_200real",
+    "description": "Baseline: 200 real samples only",
+    "n_real": 200,
+    "n_synthetic": 0,
+    "accuracy": 0.71,
+    "f1_score": 0.6715015508118957,
+    "roc_auc": 0.8999573189973147,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 43.500495195388794
+  },
+  {
+    "experiment": "B2_synthmed_200real_500syn",
+    "description": "SynthMed: 200 real + 500 synthetic",
+    "n_real": 200,
+    "n_synthetic": 500,
+    "accuracy": 0.7,
+    "f1_score": 0.6524038461538462,
+    "roc_auc": 0.8776985646566287,
+    "repair_enabled": true,
+    "rag_enabled": true,
+    "training_time": 931.2624502182007
+  },
+  {
+    "experiment": "C1_upperbound_fulldata",
+    "description": "Upper bound: All real data (2564 samples)",
+    "n_real": 2000,
+    "n_synthetic": 0,
+    "accuracy": 0.83,
+    "f1_score": 0.8110051532948052,
+    "roc_auc": 0.955666694182349,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 179.56584572792053
+  },
+  {
+    "experiment": "A8_geometric_only",
+    "description": "Geometric augmentation only, no synthetic data",
+    "n_real": 100,
+    "n_synthetic": 0,
+    "accuracy": 0.75,
+    "f1_score": 0.7220954859497476,
+    "roc_auc": 0.8941840095573458,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 43.92369747161865
+  }
+]

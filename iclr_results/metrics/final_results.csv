@@ -1,0 +1,11 @@
+experiment,description,n_real,n_synthetic,accuracy,f1_score,roc_auc,repair_enabled,rag_enabled,training_time
+A1_baseline_100real,Baseline: 100 real samples only,100,0,0.66,0.6380399752134023,0.878121343113591,False,False,37.98512935638428
+A2_synthmed_100real_500syn,SynthMed: 100 real + 500 synthetic,100,500,0.66,0.5896103896103895,0.8461952718305591,True,True,812.4432277679443
+A3_norepair_100real_500syn,Ablation: No schema repair,100,500,0.66,0.5896103896103895,0.8461952718305591,False,True,811.4665627479553
+A4_norag_100real_500syn,Ablation: No RAG grounding,100,500,0.67,0.6082868114015655,0.8660151649721882,True,False,776.2117466926575
+B1_baseline_200real,Baseline: 200 real samples only,200,0,0.72,0.7028920786815523,0.9259867896861472,False,False,44.55815291404724
+B2_synthmed_200real_500syn,SynthMed: 200 real + 500 synthetic,200,500,0.73,0.6955516801111432,0.899505643152949,True,True,813.5276420116425
+C1_upperbound_fulldata,Upper bound: All real data (2564 samples),2000,0,0.82,0.8127843822843822,0.9193853592189726,False,False,226.87911581993103
+A5_imageonly_diffusion,"Image-only diffusion augmentation, no metadata/RAG/repair",100,0,0.64,0.6225119047619048,0.8245408092396964,False,False,114.12750935554504
+A8_geometric_only,"Geometric augmentation only, no synthetic data",100,0,0.66,0.6380399752134023,0.878121343113591,False,False,32.19585347175598
+A6_synthmed_conditional,SynthMed with class-conditional DDPM,100,500,0.69,0.6664985994397759,0.8611253165174202,True,True,811.4018635749817

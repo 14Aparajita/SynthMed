@@ -1,0 +1,16 @@
+{
+  "experiment_name": "synthmed_low_data",
+  "accuracy": 0.67,
+  "f1_score": 0.6246571428571428,
+  "roc_auc": 0.8802247302247302,
+  "schema_validity_rate": 1.0,
+  "repair_success_rate": 0.0,
+  "mean_grounding_score": 0.0,
+  "num_synthetic_metadata": 500,
+  "num_synthetic_images": 500,
+  "schema_repair_enabled": true,
+  "rag_grounding_enabled": true,
+  "final_train_loss": 0.9079933857917786,
+  "final_val_loss": 1.1305993061799269,
+  "training_time": 27.511458158493042
+}

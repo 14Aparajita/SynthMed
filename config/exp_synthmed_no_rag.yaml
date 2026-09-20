@@ -29,6 +29,7 @@ experiment:
   name: synthmed_low_data
   seed: 42
 generation:
+  diffusion_epochs: 20
   diffusion_checkpoint: outputs/models/diffusion_unet.pt
   diffusion_image_size: 32
   diffusion_timesteps: 100

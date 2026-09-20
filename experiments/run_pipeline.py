@@ -10,14 +10,20 @@ import argparse
 from pathlib import Path
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, ConcatDataset
 import pandas as pd
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils import load_config, setup_logging, set_seed
-from src.data import preprocess_images, load_clinical_data, DRDataset, get_augmentation_pipeline
+from src.data import (
+    preprocess_images,
+    load_clinical_data,
+    DRDataset,
+    SyntheticDataset,
+    get_augmentation_pipeline,
+)
 from src.schema import SchemaValidator, JSONRepairer, load_schema
 from src.retrieval import DocumentEmbedder, FAISSIndexer, RAGFusion
 from src.generation import MetadataGenerator, LightweightDiffusion, GroundedGenerator
@@ -64,7 +70,6 @@ def run_pipeline(config_path: str):
     
     # Ensure image paths point to processed files
     if 'image_path' in clinical_df.columns:
-        # Convert raw paths to processed .npy paths
         def convert_to_processed_path(path):
             if pd.isna(path):
                 return path
@@ -77,25 +82,27 @@ def run_pipeline(config_path: str):
         
         clinical_df['image_path'] = clinical_df['image_path'].apply(convert_to_processed_path)
     
-    # Split real data
-    n_train = config.data.num_real_train
-    n_test = config.data.num_real_test
-    
-    # Use all available data if requested numbers exceed dataset
-    total_available = len(clinical_df)
-    n_train = min(n_train, int(total_available * 0.7))
-    n_test = min(n_test, total_available - n_train)
-    
-    train_indices = range(n_train)
-    test_indices = range(n_train, n_train + n_test)
-    
-    train_df = clinical_df.iloc[train_indices].reset_index(drop=True)
-    test_df = clinical_df.iloc[test_indices].reset_index(drop=True)
+    # Select train/test based on 'split' column (written by run_caisc_experiments.py)
+    if 'split' in clinical_df.columns:
+        train_df = clinical_df[clinical_df['split'] == 'train'].reset_index(drop=True)
+        test_df = clinical_df[clinical_df['split'] == 'test'].reset_index(drop=True)
+        logger.info(f"Using split column: Train={len(train_df)}, Test={len(test_df)}")
+    else:
+        # Fallback to positional split (legacy)
+        n_train = config.data.num_real_train
+        n_test = config.data.num_real_test
+        total_available = len(clinical_df)
+        n_train = min(n_train, int(total_available * 0.7))
+        n_test = min(n_test, total_available - n_train)
+        train_indices = range(n_train)
+        test_indices = range(n_train, n_train + n_test)
+        train_df = clinical_df.iloc[train_indices].reset_index(drop=True)
+        test_df = clinical_df.iloc[test_indices].reset_index(drop=True)
+        logger.info(f"Fallback positional split: Train={n_train}, Test={n_test}")
     
     logger.info(f"Train samples: {len(train_df)}, Test samples: {len(test_df)}")
     logger.info(f"Class distribution - Train: {train_df['dr_grade'].value_counts().to_dict()}")
     
-        
     # ============================================================
     # Step 2: Schema Validation Setup
     # ============================================================
@@ -129,7 +136,6 @@ def run_pipeline(config_path: str):
                 documents.append(f.read())
     
     if not documents:
-        # Create default knowledge base
         documents = _create_default_knowledge_base()
         logger.warning("No knowledge base found. Using default clinical documents.")
     
@@ -167,17 +173,15 @@ def run_pipeline(config_path: str):
     
     synthetic_records = []
     if config.data.num_synthetic_metadata > 0:
-        # Generate records for each DR grade
         records_per_grade = config.data.num_synthetic_metadata // 5
         
         for grade in range(5):
             generated = grounded_gen.generate_grounded(
                 dr_grade=grade,
                 num_records=records_per_grade,
-                use_grounding=True
+                use_grounding=config.retrieval.rag_enabled
             )
             
-            # Validate and repair
             for record in generated:
                 is_valid, errors = validator.validate(record)
                 if not is_valid and config.schema.repair_enabled:
@@ -204,40 +208,42 @@ def run_pipeline(config_path: str):
     synthetic_labels = []
     
     if config.data.num_synthetic_images > 0:
-        diffusion = LightweightDiffusion(
-            image_size=config.generation.diffusion_image_size,
-            num_timesteps=config.generation.diffusion_timesteps
-        ).to(config.experiment.device)
+        # Instantiate diffusion model with optional conditioning
+        diffusion_kwargs = {
+            "image_size": config.generation.diffusion_image_size,
+            "num_timesteps": config.generation.diffusion_timesteps,
+        }
+        if config.generation.conditioning_enabled:
+            diffusion_kwargs["num_classes"] = 5
+        diffusion = LightweightDiffusion(**diffusion_kwargs).to(config.experiment.device)
         
-        # Train diffusion model on real images (simplified for laptop)
-        logger.info("Training diffusion model (minimal training for demo)...")
+        logger.info("Training diffusion model...")
         _train_diffusion_minimal(
-            diffusion,
-            train_df,
-            config.experiment.device,
-            epochs=5  # Minimal epochs for laptop
+            model=diffusion,
+            train_df=train_df,
+            device=config.experiment.device,
+            epochs=config.generation.diffusion_epochs,
+            conditioning=config.generation.conditioning_enabled
         )
         
-        # Generate images
         images_per_grade = config.data.num_synthetic_images // 5
         
         for grade in range(5):
-            # Generate 32x32 images
+            labels_tensor = None
+            if config.generation.conditioning_enabled:
+                labels_tensor = torch.full((images_per_grade,), grade, dtype=torch.long, device=config.experiment.device)
+            
             generated = diffusion.sample(
                 batch_size=images_per_grade,
                 device=config.experiment.device,
-                progress=True
+                progress=True,
+                labels=labels_tensor
             )
             
             # Upscale to target size
-            generated = diffusion.upscale(
-                generated,
-                config.data.image_size
-            )
+            generated = diffusion.upscale(generated, config.data.image_size)
             
-            # Convert to numpy
-            gen_np = generated.cpu().numpy()
-            gen_np = gen_np.transpose(0, 2, 3, 1)  # NHWC
+            gen_np = generated.cpu().numpy().transpose(0, 2, 3, 1)  # NHWC
             
             for img in gen_np:
                 synthetic_images.append(img)
@@ -252,33 +258,72 @@ def run_pipeline(config_path: str):
     logger.info("Step 6: Classifier Training")
     logger.info("="*60)
     
-    # Prepare datasets
-    augmentation = get_augmentation_pipeline()
+    # Build real training dataset
+    augmentation = get_augmentation_pipeline(strength=config.data.augmentation_strength)
     
-    # Real train dataset
     train_paths = train_df['image_path'].tolist()
     train_labels = train_df['dr_grade'].tolist()
-    
     real_train_dataset = DRDataset(
-        train_paths,
-        train_labels,
-        transform=augmentation
+        image_paths=train_paths,
+        labels=train_labels,
+        transform=augmentation,
+        return_metadata=config.classifier.use_metadata  # real images -> zero vector
     )
+    
+    # If synthetic images exist, combine them with real
+    # if len(synthetic_images) > 0:
+    #     assert len(synthetic_images) == len(synthetic_labels) == len(synthetic_records), \
+    #         f"Mismatch: synthetic_images={len(synthetic_images)}, labels={len(synthetic_labels)}, records={len(synthetic_records)}"
+    #     synthetic_dataset = SyntheticDataset(
+    #         real_dataset=real_train_dataset,
+    #         synthetic_images=synthetic_images,
+    #         synthetic_labels=synthetic_labels,
+    #         synthetic_metadata=synthetic_records
+    #     )
+
+    if len(synthetic_images) > 0:
+        if len(synthetic_records) > 0:
+            # Full SynthMed with metadata
+            assert len(synthetic_images) == len(synthetic_labels) == len(synthetic_records), \
+                f"Mismatch: images={len(synthetic_images)}, labels={len(synthetic_labels)}, records={len(synthetic_records)}"
+            synthetic_dataset = SyntheticDataset(
+                real_dataset=real_train_dataset,
+                synthetic_images=synthetic_images,
+                synthetic_labels=synthetic_labels,
+                synthetic_metadata=synthetic_records
+            )
+        else:
+            # Image-only diffusion (no metadata)
+            assert len(synthetic_images) == len(synthetic_labels), \
+                f"Mismatch: images={len(synthetic_images)}, labels={len(synthetic_labels)}"
+            synthetic_dataset = SyntheticDataset(
+                real_dataset=real_train_dataset,
+                synthetic_images=synthetic_images,
+                synthetic_labels=synthetic_labels,
+                synthetic_metadata=[]  # empty list will produce zero metadata vectors
+            )
+
+
+        train_dataset = synthetic_dataset
+    else:
+        train_dataset = real_train_dataset
     
     # Test dataset
     test_paths = test_df['image_path'].tolist()
     test_labels = test_df['dr_grade'].tolist()
-    
-    test_dataset = DRDataset(test_paths, test_labels)
-    
-    # Create loaders
-    train_loader = DataLoader(
-        real_train_dataset,
-        batch_size=config.classifier.batch_size,
-        shuffle=True,
-        num_workers=0  # Laptop-friendly
+    test_dataset = DRDataset(
+        image_paths=test_paths,
+        labels=test_labels,
+        transform=None,
+        return_metadata=config.classifier.use_metadata
     )
     
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.classifier.batch_size,
+        shuffle=True,
+        num_workers=0
+    )
     test_loader = DataLoader(
         test_dataset,
         batch_size=config.classifier.batch_size,
@@ -286,21 +331,26 @@ def run_pipeline(config_path: str):
         num_workers=0
     )
     
-    # Train classifier
-    model = DRClassifier(num_classes=config.classifier.num_classes)
+    # Instantiate classifier with optional metadata fusion
+    model = DRClassifier(
+        num_classes=config.classifier.num_classes,
+        pretrained=True,
+        use_metadata=config.classifier.use_metadata,
+        metadata_dim=7
+    )
     trainer = ClassifierTrainer(
-        model,
-        config.experiment.device,
-        config.classifier.learning_rate,
-        config.classifier.weight_decay
+        model=model,
+        device=config.experiment.device,
+        learning_rate=config.classifier.learning_rate,
+        weight_decay=config.classifier.weight_decay
     )
     
-    logger.info("Training baseline classifier...")
+    logger.info("Training classifier...")
     start_time = time.time()
     
     history = trainer.train(
-        train_loader,
-        test_loader,
+        train_loader=train_loader,
+        val_loader=test_loader,
         epochs=config.classifier.epochs,
         save_dir="outputs/models"
     )
@@ -314,28 +364,36 @@ def run_pipeline(config_path: str):
     logger.info("Step 7: Evaluation")
     logger.info("="*60)
     
-    # Evaluate on test set
     trainer.model.eval()
     all_preds = []
     all_labels = []
     all_probs = []
     
     with torch.no_grad():
-        for images, labels in test_loader:
-            images = images.to(config.experiment.device)
-            outputs = trainer.model(images)
+        for batch in test_loader:
+            if len(batch) == 3:
+                images, labels, metadata = batch
+                images = images.to(config.experiment.device)
+                labels = labels.to(config.experiment.device)
+                metadata = metadata.to(config.experiment.device)
+                outputs = trainer.model(images, metadata) if config.classifier.use_metadata else trainer.model(images)
+            else:
+                images, labels = batch
+                images = images.to(config.experiment.device)
+                labels = labels.to(config.experiment.device)
+                outputs = trainer.model(images)
+            
             probs = torch.softmax(outputs, dim=1)
             preds = outputs.argmax(dim=1)
             
             all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.numpy())
+            all_labels.extend(labels.cpu().numpy())
             all_probs.extend(probs.cpu().numpy())
     
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
     all_probs = np.array(all_probs)
     
-    # Compute metrics
     metrics = compute_all_metrics(
         all_labels,
         all_preds,
@@ -349,12 +407,11 @@ def run_pipeline(config_path: str):
     metrics.num_synthetic_metadata = config.data.num_synthetic_metadata
     metrics.num_synthetic_images = config.data.num_synthetic_images
     metrics.schema_repair_enabled = config.schema.repair_enabled
-    metrics.rag_grounding_enabled = True
+    metrics.rag_grounding_enabled = config.retrieval.rag_enabled
     metrics.train_loss = history['train_loss']
     metrics.val_loss = history['val_loss']
     metrics.training_time = training_time
     
-    # Generate report
     reporter = ResultsReporter()
     reporter.add_experiment(metrics)
     reporter.generate_report()
@@ -374,56 +431,40 @@ def run_pipeline(config_path: str):
 def _create_default_knowledge_base() -> list:
     """Create default DR knowledge base documents."""
     return [
-        "Diabetic retinopathy (DR) is a microvascular complication of diabetes mellitus. "
-        "It is characterized by progressive damage to retinal blood vessels.",
-        
-        "Non-proliferative diabetic retinopathy (NPDR) is the early stage of DR. "
-        "Findings include microaneurysms, dot and blot hemorrhages, and hard exudates.",
-        
-        "Proliferative diabetic retinopathy (PDR) is the advanced stage characterized "
-        "by neovascularization of the optic disc or elsewhere in the retina.",
-        
-        "Microaneurysms are the earliest clinical sign of diabetic retinopathy. "
-        "They appear as small, round, red dots in the retina.",
-        
-        "Hard exudates are yellow-white deposits of lipoproteins in the retina, "
-        "often arranged in a circinate pattern around leaking microaneurysms.",
-        
-        "Cotton wool spots represent areas of retinal ischemia and appear as "
-        "fluffy white lesions in the nerve fiber layer.",
-        
-        "Venous beading and intraretinal microvascular abnormalities (IRMA) "
-        "are signs of severe NPDR and indicate high risk of progression to PDR.",
-        
-        "Diabetic macular edema (DME) is the leading cause of vision loss in "
-        "patients with diabetic retinopathy, characterized by retinal thickening.",
-        
-        "Treatment options include anti-VEGF injections, laser photocoagulation, "
-        "and vitrectomy for advanced cases with vitreous hemorrhage.",
-        
-        "Regular screening is crucial as early stages of DR are often asymptomatic "
-        "but treatment can prevent vision loss.",
+        "Diabetic retinopathy (DR) is a microvascular complication of diabetes mellitus. It is characterized by progressive damage to retinal blood vessels.",
+        "Non-proliferative diabetic retinopathy (NPDR) is the early stage of DR. Findings include microaneurysms, dot and blot hemorrhages, and hard exudates.",
+        "Proliferative diabetic retinopathy (PDR) is the advanced stage characterized by neovascularization of the optic disc or elsewhere in the retina.",
+        "Microaneurysms are the earliest clinical sign of diabetic retinopathy. They appear as small, round, red dots in the retina.",
+        "Hard exudates are yellow-white deposits of lipoproteins in the retina, often arranged in a circinate pattern around leaking microaneurysms.",
+        "Cotton wool spots represent areas of retinal ischemia and appear as fluffy white lesions in the nerve fiber layer.",
+        "Venous beading and intraretinal microvascular abnormalities (IRMA) are signs of severe NPDR and indicate high risk of progression to PDR.",
+        "Diabetic macular edema (DME) is the leading cause of vision loss in patients with diabetic retinopathy, characterized by retinal thickening.",
+        "Treatment options include anti-VEGF injections, laser photocoagulation, and vitrectomy for advanced cases with vitreous hemorrhage.",
+        "Regular screening is crucial as early stages of DR are often asymptomatic but treatment can prevent vision loss.",
     ]
 
 def _train_diffusion_minimal(
     model: LightweightDiffusion,
     train_df: pd.DataFrame,
     device: str,
-    epochs: int = 5
+    epochs: int = 20,
+    conditioning: bool = False
 ):
-    """Minimal diffusion model training for laptop."""
+    """Minimal diffusion model training for laptop.
+    If conditioning is True, use DR grade labels for conditioning during training.
+    """
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     
-    image_paths = train_df['image_path'].tolist()[:100]  # Use subset
+    image_paths = train_df['image_path'].tolist()[:100]  # Use subset for speed
+    grade_labels = train_df['dr_grade'].tolist()[:100] if conditioning else None
     
     for epoch in range(epochs):
         total_loss = 0.0
-        for img_path in image_paths:
+        for idx, img_path in enumerate(image_paths):
             try:
                 img = np.load(img_path)
-                img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)
-                img = img.to(device)
+                img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).to(device)
                 
                 # Sample timestep
                 t = torch.randint(0, model.num_timesteps, (1,), device=device)
@@ -432,10 +473,14 @@ def _train_diffusion_minimal(
                 noise = torch.randn_like(img)
                 x_noisy, noise = model.add_noise(img, t, noise)
                 
-                # Predict noise
-                predicted_noise = model(x_noisy, t)
+                # Prepare conditioning label if needed
+                cond_label = None
+                if conditioning and grade_labels is not None:
+                    cond_label = torch.tensor([grade_labels[idx]], dtype=torch.long, device=device)
                 
-                # Loss
+                # Predict noise
+                predicted_noise = model(x_noisy, t, labels=cond_label)
+                
                 loss = torch.nn.functional.mse_loss(predicted_noise, noise)
                 
                 optimizer.zero_grad()
@@ -453,14 +498,8 @@ def _train_diffusion_minimal(
 
 def main():
     parser = argparse.ArgumentParser(description="SynthMed Pipeline")
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="config/default.yaml",
-        help="Path to configuration file"
-    )
+    parser.add_argument("--config", type=str, default="config/default.yaml", help="Path to configuration file")
     args = parser.parse_args()
-    
     run_pipeline(args.config)
 
 if __name__ == "__main__":

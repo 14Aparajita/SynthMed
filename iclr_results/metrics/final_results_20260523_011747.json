@@ -1,0 +1,52 @@
+{
+  "baseline_real_only": {
+    "description": "Baseline: Real data only, no synthetic augmentation",
+    "accuracy": 0.8090909090909091,
+    "f1_score": 0.8058430480892036,
+    "roc_auc": 0.93563207573518,
+    "schema_validity": 0.0,
+    "repair_success": 0.0,
+    "grounding_score": 0.0,
+    "training_time": 417.8263204097748
+  },
+  "synth_metadata_only": {
+    "description": "Synthetic metadata augmentation only",
+    "accuracy": 0.8127272727272727,
+    "f1_score": 0.8044325031693452,
+    "roc_auc": 0.9334818768523638,
+    "schema_validity": 1.0,
+    "repair_success": 0.0,
+    "grounding_score": 0.0,
+    "training_time": 890.8834104537964
+  },
+  "synth_both_full": {
+    "description": "Full SynthMed: Both metadata and image generation",
+    "accuracy": 0.8145454545454546,
+    "f1_score": 0.8106888854629151,
+    "roc_auc": 0.9321848186769884,
+    "schema_validity": 1.0,
+    "repair_success": 0.0,
+    "grounding_score": 0.0,
+    "training_time": 806.1548209190369
+  },
+  "no_schema_repair": {
+    "description": "Ablation: Without schema repair",
+    "accuracy": 0.8145454545454546,
+    "f1_score": 0.8106888854629151,
+    "roc_auc": 0.9321848186769884,
+    "schema_validity": 1.0,
+    "repair_success": 0.0,
+    "grounding_score": 0.0,
+    "training_time": 809.0855793952942
+  },
+  "no_rag_grounding": {
+    "description": "Ablation: Without RAG knowledge grounding",
+    "accuracy": 0.8145454545454546,
+    "f1_score": 0.8106888854629151,
+    "roc_auc": 0.9321848186769884,
+    "schema_validity": 1.0,
+    "repair_success": 0.0,
+    "grounding_score": 0.0,
+    "training_time": 807.3341791629791
+  }
+}

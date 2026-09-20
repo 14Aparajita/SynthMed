@@ -5,6 +5,12 @@ from dataclasses import dataclass, field
 import torch
 
 @dataclass
+class ExperimentConfig:
+    name: str = "synthmed"
+    seed: int = 42
+    device: str = "cpu"
+
+@dataclass
 class DataConfig:
     raw_dir: str = "data/raw"
     processed_dir: str = "data/processed"
@@ -14,6 +20,7 @@ class DataConfig:
     num_real_test: int = 100
     num_synthetic_metadata: int = 200
     num_synthetic_images: int = 200
+    augmentation_strength: str = "default"
 
 @dataclass
 class SchemaConfig:
@@ -27,6 +34,7 @@ class RetrievalConfig:
     top_k: int = 5
     fusion_weights: list = field(default_factory=lambda: [0.4, 0.3, 0.3])
     index_path: str = "outputs/models/faiss_index.bin"
+    rag_enabled: bool = True
 
 @dataclass
 class GenerationConfig:
@@ -36,6 +44,8 @@ class GenerationConfig:
     diffusion_timesteps: int = 100
     diffusion_image_size: int = 32
     diffusion_checkpoint: str = "outputs/models/diffusion_unet.pt"
+    diffusion_epochs: int = 20
+    conditioning_enabled: bool = False
 
 @dataclass
 class ClassifierConfig:
@@ -45,18 +55,13 @@ class ClassifierConfig:
     epochs: int = 30
     learning_rate: float = 0.001
     weight_decay: float = 0.0001
+    use_metadata: bool = False
 
 @dataclass
 class EvaluationConfig:
     metrics: list = field(default_factory=lambda: ["accuracy", "f1", "roc_auc"])
     save_results: bool = True
     results_path: str = "outputs/results"
-
-@dataclass
-class ExperimentConfig:
-    name: str = "synthmed"
-    seed: int = 42
-    device: str = "cpu"
 
 @dataclass
 class Config:
@@ -69,7 +74,6 @@ class Config:
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
 
 def load_config(config_path: str) -> Config:
-    """Load configuration from YAML file."""
     with open(config_path, 'r') as f:
         config_dict = yaml.safe_load(f)
     
@@ -81,7 +85,6 @@ def load_config(config_path: str) -> Config:
                 if hasattr(section_config, key):
                     setattr(section_config, key, value)
     
-    # Auto-detect device
     if config.experiment.device == "cpu":
         config.experiment.device = "cuda" if torch.cuda.is_available() else "cpu"
     

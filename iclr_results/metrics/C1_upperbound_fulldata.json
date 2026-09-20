@@ -1,0 +1,98 @@
+{
+  "experiment_name": "C1_upperbound_fulldata",
+  "accuracy": 0.82,
+  "f1_score": 0.8127843822843822,
+  "roc_auc": 0.9193853592189726,
+  "schema_validity_rate": 0.0,
+  "repair_success_rate": 0.0,
+  "mean_grounding_score": 0.0,
+  "num_synthetic_metadata": 0,
+  "num_synthetic_images": 0,
+  "schema_repair_enabled": false,
+  "rag_grounding_enabled": false,
+  "final_train_loss": 0.622260608792305,
+  "final_val_loss": 0.9453186071836032,
+  "training_time": 209.92135381698608,
+  "confusion_matrix": [
+    [
+      50,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      5,
+      3,
+      0,
+      1
+    ],
+    [
+      2,
+      1,
+      21,
+      1,
+      2
+    ],
+    [
+      0,
+      0,
+      0,
+      3,
+      2
+    ],
+    [
+      1,
+      0,
+      4,
+      0,
+      3
+    ]
+  ],
+  "per_class_report": {
+    "0": {
+      "precision": 0.9259259259259259,
+      "recall": 1.0,
+      "f1-score": 0.9615384615384616,
+      "support": 50.0
+    },
+    "1": {
+      "precision": 0.8333333333333334,
+      "recall": 0.5,
+      "f1-score": 0.625,
+      "support": 10.0
+    },
+    "2": {
+      "precision": 0.75,
+      "recall": 0.7777777777777778,
+      "f1-score": 0.7636363636363637,
+      "support": 27.0
+    },
+    "3": {
+      "precision": 0.75,
+      "recall": 0.6,
+      "f1-score": 0.6666666666666666,
+      "support": 5.0
+    },
+    "4": {
+      "precision": 0.375,
+      "recall": 0.375,
+      "f1-score": 0.375,
+      "support": 8.0
+    },
+    "accuracy": 0.82,
+    "macro avg": {
+      "precision": 0.7268518518518519,
+      "recall": 0.6505555555555556,
+      "f1-score": 0.6783682983682984,
+      "support": 100.0
+    },
+    "weighted avg": {
+      "precision": 0.8162962962962963,
+      "recall": 0.82,
+      "f1-score": 0.8127843822843822,
+      "support": 100.0
+    }
+  }
+}

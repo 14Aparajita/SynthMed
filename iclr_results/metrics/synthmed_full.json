@@ -1,0 +1,16 @@
+{
+  "experiment_name": "synthmed_full",
+  "accuracy": 0.34545454545454546,
+  "f1_score": 0.34902670421489096,
+  "roc_auc": 0.0,
+  "schema_validity_rate": 1.0,
+  "repair_success_rate": 0.0,
+  "mean_grounding_score": 0.0,
+  "num_synthetic_metadata": 200,
+  "num_synthetic_images": 200,
+  "schema_repair_enabled": true,
+  "rag_grounding_enabled": true,
+  "final_train_loss": 0.008280480859973988,
+  "final_val_loss": 13.47758065055997,
+  "training_time": 380.78825855255127
+}

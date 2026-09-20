@@ -1,0 +1,86 @@
+[
+  {
+    "experiment": "A1_baseline_100real",
+    "description": "Baseline: 100 real samples only",
+    "n_real": 100,
+    "n_synthetic": 0,
+    "accuracy": 0.68,
+    "f1_score": 0.620075525901214,
+    "roc_auc": 0.9029286782210496,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 206.32423901557922
+  },
+  {
+    "experiment": "A2_synthmed_100real_500syn",
+    "description": "SynthMed: 100 real + 500 synthetic",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.74,
+    "f1_score": 0.7168194669172019,
+    "roc_auc": 0.9265724014010824,
+    "repair_enabled": true,
+    "rag_enabled": true,
+    "training_time": 3498.8978414535522
+  },
+  {
+    "experiment": "A3_norepair_100real_500syn",
+    "description": "Ablation: No schema repair",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.74,
+    "f1_score": 0.7168194669172019,
+    "roc_auc": 0.9265724014010824,
+    "repair_enabled": false,
+    "rag_enabled": true,
+    "training_time": 1858.0269930362701
+  },
+  {
+    "experiment": "A4_norag_100real_500syn",
+    "description": "Ablation: No RAG grounding",
+    "n_real": 100,
+    "n_synthetic": 500,
+    "accuracy": 0.74,
+    "f1_score": 0.7168194669172019,
+    "roc_auc": 0.9265724014010824,
+    "repair_enabled": true,
+    "rag_enabled": false,
+    "training_time": 1737.7583429813385
+  },
+  {
+    "experiment": "B1_baseline_200real",
+    "description": "Baseline: 200 real samples only",
+    "n_real": 200,
+    "n_synthetic": 0,
+    "accuracy": 0.72,
+    "f1_score": 0.6764992658261008,
+    "roc_auc": 0.912673941227312,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 61.66076302528381
+  },
+  {
+    "experiment": "B2_synthmed_200real_500syn",
+    "description": "SynthMed: 200 real + 500 synthetic",
+    "n_real": 200,
+    "n_synthetic": 500,
+    "accuracy": 0.71,
+    "f1_score": 0.6699315658466777,
+    "roc_auc": 0.9261134982270356,
+    "repair_enabled": true,
+    "rag_enabled": true,
+    "training_time": 1043.5424537658691
+  },
+  {
+    "experiment": "C1_upperbound_fulldata",
+    "description": "Upper bound: All real data (2564 samples)",
+    "n_real": 2000,
+    "n_synthetic": 0,
+    "accuracy": 0.85,
+    "f1_score": 0.845748987854251,
+    "roc_auc": 0.9544378099417976,
+    "repair_enabled": false,
+    "rag_enabled": false,
+    "training_time": 209.27294754981995
+  }
+]

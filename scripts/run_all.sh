@@ -33,9 +33,9 @@ echo "Running sanity checks..."
 python -m pytest tests/ -v --tb=short 2>/dev/null || echo "Tests complete (some may fail without real data)"
 echo ""
 
-# Run main pipeline
-echo "Running SynthMed pipeline..."
-python experiments/run_pipeline.py --config config/default.yaml
+# Run experiments
+echo "Running full experiment suite..."
+python run_caisc_experiments.py
 echo ""
 
 echo "========================================="

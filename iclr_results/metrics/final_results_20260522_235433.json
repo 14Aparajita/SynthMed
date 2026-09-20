@@ -1,0 +1,17 @@
+{
+  "baseline_real_only": {
+    "error": "could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:src.utils.config.ClassifierConfig'\n  in \"config/exp_baseline_real_only.yaml\", line 1, column 13"
+  },
+  "synth_metadata_only": {
+    "error": "could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:src.utils.config.ClassifierConfig'\n  in \"config/exp_synth_metadata_only.yaml\", line 1, column 13"
+  },
+  "synth_both_full": {
+    "error": "could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:src.utils.config.ClassifierConfig'\n  in \"config/exp_synth_both_full.yaml\", line 1, column 13"
+  },
+  "no_schema_repair": {
+    "error": "could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:src.utils.config.ClassifierConfig'\n  in \"config/exp_no_schema_repair.yaml\", line 1, column 13"
+  },
+  "no_rag_grounding": {
+    "error": "could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:src.utils.config.ClassifierConfig'\n  in \"config/exp_no_rag_grounding.yaml\", line 1, column 13"
+  }
+}
