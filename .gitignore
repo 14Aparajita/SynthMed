@@ -1,3 +1,10 @@
+# ---- Secrets ----
+kaggle.json
+secrets.json
+.env
+.env.local
+.env.*.local
+*.pem
 
 # ---- Datasets & model checkpoints ----
 data/raw/
@@ -28,6 +35,12 @@ ENV/
 .coverage
 htmlcov/
 
+# ---- Node ----
+node_modules/
+npm-debug.log
+package-lock.json
+package.json
+
 # ---- IDE / OS ----
 .vscode/
 .idea/
@@ -36,14 +49,23 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# ---- Environment files ----
-.env
-.env.local
-.env.*.local
-
 # ---- Jupyter ----
 .ipynb_checkpoints/
 
 # ---- Logs ----
 *.log
 outputs/logs/
+
+# ---- Debug / scratch PowerShell scripts ----
+# Keep only the two canonical helpers; ignore the rest
+/final_improvements.ps1
+/finilize_paper.ps1
+/finish_all.ps1
+/finish_v2.ps1
+/run_final.ps1
+
+# ---- Debug Python scratch ----
+run_multiseed_3seeds.py
+
+# ---- Old fake runner ----
+run_final_experiment.py
