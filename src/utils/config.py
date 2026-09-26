@@ -1,8 +1,8 @@
 import yaml
-from pathlib import Path
-from typing import Any, Dict
 from dataclasses import dataclass, field
+from typing import Any, Dict
 import torch
+
 
 @dataclass
 class ExperimentConfig:
@@ -10,23 +10,26 @@ class ExperimentConfig:
     seed: int = 42
     device: str = "cpu"
 
+
 @dataclass
 class DataConfig:
     raw_dir: str = "data/raw"
     processed_dir: str = "data/processed"
     knowledge_base_dir: str = "data/knowledge_base"
     image_size: int = 128
-    num_real_train: int = 400
-    num_real_test: int = 100
-    num_synthetic_metadata: int = 200
-    num_synthetic_images: int = 200
+    num_real_train: int = 100
+    num_real_test: int = 732
+    num_synthetic_metadata: int = 500
+    num_synthetic_images: int = 500
     augmentation_strength: str = "default"
+
 
 @dataclass
 class SchemaConfig:
     schema_path: str = "config/schema/clinical_metadata.json"
     repair_enabled: bool = True
     repair_max_iterations: int = 3
+
 
 @dataclass
 class RetrievalConfig:
@@ -36,32 +39,36 @@ class RetrievalConfig:
     index_path: str = "outputs/models/faiss_index.bin"
     rag_enabled: bool = True
 
+
 @dataclass
 class GenerationConfig:
     metadata_model: str = "distilgpt2"
     metadata_max_length: int = 256
     temperature: float = 0.7
     diffusion_timesteps: int = 100
-    diffusion_image_size: int = 32
+    diffusion_image_size: int = 128
     diffusion_checkpoint: str = "outputs/models/diffusion_unet.pt"
     diffusion_epochs: int = 20
     conditioning_enabled: bool = False
+
 
 @dataclass
 class ClassifierConfig:
     model_name: str = "mobilenet_v2"
     num_classes: int = 5
-    batch_size: int = 16
-    epochs: int = 30
-    learning_rate: float = 0.001
-    weight_decay: float = 0.0001
+    batch_size: int = 8
+    epochs: int = 50
+    learning_rate: float = 0.0001
+    weight_decay: float = 0.001
     use_metadata: bool = False
+
 
 @dataclass
 class EvaluationConfig:
     metrics: list = field(default_factory=lambda: ["accuracy", "f1", "roc_auc"])
     save_results: bool = True
     results_path: str = "outputs/results"
+
 
 @dataclass
 class Config:
@@ -73,10 +80,11 @@ class Config:
     classifier: ClassifierConfig = field(default_factory=ClassifierConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
 
+
 def load_config(config_path: str) -> Config:
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         config_dict = yaml.safe_load(f)
-    
+
     config = Config()
     for section, values in config_dict.items():
         if hasattr(config, section):
@@ -84,8 +92,8 @@ def load_config(config_path: str) -> Config:
             for key, value in values.items():
                 if hasattr(section_config, key):
                     setattr(section_config, key, value)
-    
+
     if config.experiment.device == "cpu":
         config.experiment.device = "cuda" if torch.cuda.is_available() else "cpu"
-    
+
     return config

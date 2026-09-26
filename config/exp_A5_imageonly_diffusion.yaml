@@ -10,7 +10,7 @@ data:
   augmentation_strength: default
   image_size: 128
   knowledge_base_dir: data/knowledge_base
-  num_real_test: 100
+  num_real_test: 733
   num_real_train: 100
   num_synthetic_images: 500
   num_synthetic_metadata: 0
@@ -31,7 +31,7 @@ generation:
   conditioning_enabled: false
   diffusion_checkpoint: outputs/models/diffusion_unet.pt
   diffusion_epochs: 20
-  diffusion_image_size: 32
+  diffusion_image_size: 128
   diffusion_timesteps: 100
   metadata_max_length: 256
   metadata_model: distilgpt2

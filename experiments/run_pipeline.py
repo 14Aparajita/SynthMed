@@ -1,6 +1,10 @@
-"""
+﻿"""
 Main experiment pipeline for SynthMed.
-Runs the complete synthetic data generation and evaluation workflow.
+Runs synthetic data generation and evaluation.
+
+FID is NOT computed here. During A2-family runs, 20 real + 20 synthetic
+images are saved to outputs/fid_samples/ for offline FID computation via
+scripts/compute_fid_offline.py. This keeps the pipeline crash-resistant.
 """
 
 import sys
@@ -10,19 +14,15 @@ import argparse
 from pathlib import Path
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 import pandas as pd
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils import load_config, setup_logging, set_seed
 from src.data import (
-    preprocess_images,
-    load_clinical_data,
-    DRDataset,
-    SyntheticDataset,
-    get_augmentation_pipeline,
+    preprocess_images, load_clinical_data,
+    DRDataset, SyntheticDataset, get_augmentation_pipeline,
 )
 from src.schema import SchemaValidator, JSONRepairer, load_schema
 from src.retrieval import DocumentEmbedder, FAISSIndexer, RAGFusion
@@ -32,404 +32,8 @@ from src.evaluation import compute_all_metrics, ResultsReporter, ExperimentMetri
 
 logger = setup_logging()
 
-def run_pipeline(config_path: str):
-    """Run complete SynthMed pipeline."""
-    config = load_config(config_path)
-    set_seed(config.experiment.seed)
-    
-    logger.info(f"Starting SynthMed pipeline: {config.experiment.name}")
-    logger.info(f"Device: {config.experiment.device}")
-    
-    # ============================================================
-    # Step 1: Data Preparation
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 1: Data Preparation")
-    logger.info("="*60)
-    
-    # Preprocess images - convert to .npy format
-    image_files = preprocess_images(
-        config.data.raw_dir,
-        config.data.processed_dir,
-        config.data.image_size
-    )
-    
-    if not image_files:
-        logger.error("No images found! Please check your data directory.")
-        return None
-    
-    # Create image mapping (stem -> full path)
-    image_mapping = {Path(f).stem: f for f in image_files}
-    logger.info(f"Processed {len(image_mapping)} images")
-    
-    # Load clinical data
-    clinical_df = load_clinical_data(
-        str(Path(config.data.raw_dir) / "clinical.csv"),
-        image_mapping
-    )
-    
-    # Ensure image paths point to processed files
-    if 'image_path' in clinical_df.columns:
-        def convert_to_processed_path(path):
-            if pd.isna(path):
-                return path
-            path_str = str(path)
-            stem = Path(path_str).stem
-            processed_path = Path(config.data.processed_dir) / f"{stem}.npy"
-            if processed_path.exists():
-                return str(processed_path)
-            return path_str
-        
-        clinical_df['image_path'] = clinical_df['image_path'].apply(convert_to_processed_path)
-    
-    # Select train/test based on 'split' column (written by run_caisc_experiments.py)
-    if 'split' in clinical_df.columns:
-        train_df = clinical_df[clinical_df['split'] == 'train'].reset_index(drop=True)
-        test_df = clinical_df[clinical_df['split'] == 'test'].reset_index(drop=True)
-        logger.info(f"Using split column: Train={len(train_df)}, Test={len(test_df)}")
-    else:
-        # Fallback to positional split (legacy)
-        n_train = config.data.num_real_train
-        n_test = config.data.num_real_test
-        total_available = len(clinical_df)
-        n_train = min(n_train, int(total_available * 0.7))
-        n_test = min(n_test, total_available - n_train)
-        train_indices = range(n_train)
-        test_indices = range(n_train, n_train + n_test)
-        train_df = clinical_df.iloc[train_indices].reset_index(drop=True)
-        test_df = clinical_df.iloc[test_indices].reset_index(drop=True)
-        logger.info(f"Fallback positional split: Train={n_train}, Test={n_test}")
-    
-    logger.info(f"Train samples: {len(train_df)}, Test samples: {len(test_df)}")
-    logger.info(f"Class distribution - Train: {train_df['dr_grade'].value_counts().to_dict()}")
-    
-    # ============================================================
-    # Step 2: Schema Validation Setup
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 2: Schema Validation Setup")
-    logger.info("="*60)
-    
-    schema = load_schema(config.schema.schema_path)
-    validator = SchemaValidator(schema)
-    repairer = JSONRepairer(schema, config.schema.repair_max_iterations)
-    
-    # ============================================================
-    # Step 3: Knowledge Base & Retrieval Setup
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 3: Retrieval System Setup")
-    logger.info("="*60)
-    
-    # Load knowledge base
-    kb_dir = Path(config.data.knowledge_base_dir)
-    kb_files = list(kb_dir.glob("*.txt")) + list(kb_dir.glob("*.jsonl"))
-    
-    documents = []
-    for kb_file in kb_files:
-        with open(kb_file, 'r') as f:
-            if kb_file.suffix == '.jsonl':
-                for line in f:
-                    data = json.loads(line)
-                    documents.append(data.get('text', ''))
-            else:
-                documents.append(f.read())
-    
-    if not documents:
-        documents = _create_default_knowledge_base()
-        logger.warning("No knowledge base found. Using default clinical documents.")
-    
-    logger.info(f"Loaded {len(documents)} knowledge base documents")
-    
-    # Setup retrieval
-    embedder = DocumentEmbedder(config.retrieval.embedder_model)
-    doc_embeddings = embedder.embed_documents(documents)
-    
-    indexer = FAISSIndexer(embedder.embedding_dim)
-    indexer.add_documents(documents, doc_embeddings)
-    
-    rag_fusion = RAGFusion(
-        embedder,
-        indexer,
-        config.retrieval.fusion_weights,
-        config.retrieval.top_k
-    )
-    
-    # ============================================================
-    # Step 4: Synthetic Metadata Generation
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 4: Synthetic Metadata Generation")
-    logger.info("="*60)
-    
-    metadata_gen = MetadataGenerator(
-        config.generation.metadata_model,
-        config.experiment.device,
-        config.generation.metadata_max_length,
-        config.generation.temperature
-    )
-    
-    grounded_gen = GroundedGenerator(metadata_gen, rag_fusion)
-    
-    synthetic_records = []
-    if config.data.num_synthetic_metadata > 0:
-        records_per_grade = config.data.num_synthetic_metadata // 5
-        
-        for grade in range(5):
-            generated = grounded_gen.generate_grounded(
-                dr_grade=grade,
-                num_records=records_per_grade,
-                use_grounding=config.retrieval.rag_enabled
-            )
-            
-            for record in generated:
-                is_valid, errors = validator.validate(record)
-                if not is_valid and config.schema.repair_enabled:
-                    repaired, success = repairer.repair(record)
-                    if success:
-                        record.update(repaired)
-                    record['_repaired'] = success
-                record['_valid'] = is_valid or record.get('_repaired', False)
-            
-            synthetic_records.extend(generated)
-        
-        logger.info(f"Generated {len(synthetic_records)} synthetic metadata records")
-        logger.info(f"Schema validity rate: {validator.validity_rate:.3f}")
-        logger.info(f"Repair success rate: {repairer.repair_success_rate:.3f}")
-    
-    # ============================================================
-    # Step 5: Synthetic Image Generation
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 5: Synthetic Image Generation")
-    logger.info("="*60)
-    
-    synthetic_images = []
-    synthetic_labels = []
-    
-    if config.data.num_synthetic_images > 0:
-        # Instantiate diffusion model with optional conditioning
-        diffusion_kwargs = {
-            "image_size": config.generation.diffusion_image_size,
-            "num_timesteps": config.generation.diffusion_timesteps,
-        }
-        if config.generation.conditioning_enabled:
-            diffusion_kwargs["num_classes"] = 5
-        diffusion = LightweightDiffusion(**diffusion_kwargs).to(config.experiment.device)
-        
-        logger.info("Training diffusion model...")
-        _train_diffusion_minimal(
-            model=diffusion,
-            train_df=train_df,
-            device=config.experiment.device,
-            epochs=config.generation.diffusion_epochs,
-            conditioning=config.generation.conditioning_enabled
-        )
-        
-        images_per_grade = config.data.num_synthetic_images // 5
-        
-        for grade in range(5):
-            labels_tensor = None
-            if config.generation.conditioning_enabled:
-                labels_tensor = torch.full((images_per_grade,), grade, dtype=torch.long, device=config.experiment.device)
-            
-            generated = diffusion.sample(
-                batch_size=images_per_grade,
-                device=config.experiment.device,
-                progress=True,
-                labels=labels_tensor
-            )
-            
-            # Upscale to target size
-            generated = diffusion.upscale(generated, config.data.image_size)
-            
-            gen_np = generated.cpu().numpy().transpose(0, 2, 3, 1)  # NHWC
-            
-            for img in gen_np:
-                synthetic_images.append(img)
-                synthetic_labels.append(grade)
-        
-        logger.info(f"Generated {len(synthetic_images)} synthetic images")
-    
-    # ============================================================
-    # Step 6: Classifier Training
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 6: Classifier Training")
-    logger.info("="*60)
-    
-    # Build real training dataset
-    augmentation = get_augmentation_pipeline(strength=config.data.augmentation_strength)
-    
-    train_paths = train_df['image_path'].tolist()
-    train_labels = train_df['dr_grade'].tolist()
-    real_train_dataset = DRDataset(
-        image_paths=train_paths,
-        labels=train_labels,
-        transform=augmentation,
-        return_metadata=config.classifier.use_metadata  # real images -> zero vector
-    )
-    
-    # If synthetic images exist, combine them with real
-    # if len(synthetic_images) > 0:
-    #     assert len(synthetic_images) == len(synthetic_labels) == len(synthetic_records), \
-    #         f"Mismatch: synthetic_images={len(synthetic_images)}, labels={len(synthetic_labels)}, records={len(synthetic_records)}"
-    #     synthetic_dataset = SyntheticDataset(
-    #         real_dataset=real_train_dataset,
-    #         synthetic_images=synthetic_images,
-    #         synthetic_labels=synthetic_labels,
-    #         synthetic_metadata=synthetic_records
-    #     )
 
-    if len(synthetic_images) > 0:
-        if len(synthetic_records) > 0:
-            # Full SynthMed with metadata
-            assert len(synthetic_images) == len(synthetic_labels) == len(synthetic_records), \
-                f"Mismatch: images={len(synthetic_images)}, labels={len(synthetic_labels)}, records={len(synthetic_records)}"
-            synthetic_dataset = SyntheticDataset(
-                real_dataset=real_train_dataset,
-                synthetic_images=synthetic_images,
-                synthetic_labels=synthetic_labels,
-                synthetic_metadata=synthetic_records
-            )
-        else:
-            # Image-only diffusion (no metadata)
-            assert len(synthetic_images) == len(synthetic_labels), \
-                f"Mismatch: images={len(synthetic_images)}, labels={len(synthetic_labels)}"
-            synthetic_dataset = SyntheticDataset(
-                real_dataset=real_train_dataset,
-                synthetic_images=synthetic_images,
-                synthetic_labels=synthetic_labels,
-                synthetic_metadata=[]  # empty list will produce zero metadata vectors
-            )
-
-
-        train_dataset = synthetic_dataset
-    else:
-        train_dataset = real_train_dataset
-    
-    # Test dataset
-    test_paths = test_df['image_path'].tolist()
-    test_labels = test_df['dr_grade'].tolist()
-    test_dataset = DRDataset(
-        image_paths=test_paths,
-        labels=test_labels,
-        transform=None,
-        return_metadata=config.classifier.use_metadata
-    )
-    
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.classifier.batch_size,
-        shuffle=True,
-        num_workers=0
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=config.classifier.batch_size,
-        shuffle=False,
-        num_workers=0
-    )
-    
-    # Instantiate classifier with optional metadata fusion
-    model = DRClassifier(
-        num_classes=config.classifier.num_classes,
-        pretrained=True,
-        use_metadata=config.classifier.use_metadata,
-        metadata_dim=7
-    )
-    trainer = ClassifierTrainer(
-        model=model,
-        device=config.experiment.device,
-        learning_rate=config.classifier.learning_rate,
-        weight_decay=config.classifier.weight_decay
-    )
-    
-    logger.info("Training classifier...")
-    start_time = time.time()
-    
-    history = trainer.train(
-        train_loader=train_loader,
-        val_loader=test_loader,
-        epochs=config.classifier.epochs,
-        save_dir="outputs/models"
-    )
-    
-    training_time = time.time() - start_time
-    
-    # ============================================================
-    # Step 7: Evaluation
-    # ============================================================
-    logger.info("="*60)
-    logger.info("Step 7: Evaluation")
-    logger.info("="*60)
-    
-    trainer.model.eval()
-    all_preds = []
-    all_labels = []
-    all_probs = []
-    
-    with torch.no_grad():
-        for batch in test_loader:
-            if len(batch) == 3:
-                images, labels, metadata = batch
-                images = images.to(config.experiment.device)
-                labels = labels.to(config.experiment.device)
-                metadata = metadata.to(config.experiment.device)
-                outputs = trainer.model(images, metadata) if config.classifier.use_metadata else trainer.model(images)
-            else:
-                images, labels = batch
-                images = images.to(config.experiment.device)
-                labels = labels.to(config.experiment.device)
-                outputs = trainer.model(images)
-            
-            probs = torch.softmax(outputs, dim=1)
-            preds = outputs.argmax(dim=1)
-            
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-            all_probs.extend(probs.cpu().numpy())
-    
-    all_preds = np.array(all_preds)
-    all_labels = np.array(all_labels)
-    all_probs = np.array(all_probs)
-    
-    metrics = compute_all_metrics(
-        all_labels,
-        all_preds,
-        all_probs,
-        schema_validity=validator.validity_rate,
-        repair_success=repairer.repair_success_rate,
-        grounding_score=rag_fusion.mean_grounding_score,
-        experiment_name=config.experiment.name
-    )
-    
-    metrics.num_synthetic_metadata = config.data.num_synthetic_metadata
-    metrics.num_synthetic_images = config.data.num_synthetic_images
-    metrics.schema_repair_enabled = config.schema.repair_enabled
-    metrics.rag_grounding_enabled = config.retrieval.rag_enabled
-    metrics.train_loss = history['train_loss']
-    metrics.val_loss = history['val_loss']
-    metrics.training_time = training_time
-    
-    reporter = ResultsReporter()
-    reporter.add_experiment(metrics)
-    reporter.generate_report()
-    
-    logger.info("="*60)
-    logger.info("Pipeline complete!")
-    logger.info(f"Accuracy: {metrics.accuracy:.4f}")
-    logger.info(f"F1 Score: {metrics.f1_score:.4f}")
-    logger.info(f"ROC-AUC: {metrics.roc_auc:.4f}")
-    logger.info(f"Schema Validity: {metrics.schema_validity_rate:.4f}")
-    logger.info(f"Repair Success: {metrics.repair_success_rate:.4f}")
-    logger.info(f"Grounding Score: {metrics.mean_grounding_score:.4f}")
-    logger.info("="*60)
-    
-    return metrics
-
-def _create_default_knowledge_base() -> list:
-    """Create default DR knowledge base documents."""
+def _default_kb() -> list:
     return [
         "Diabetic retinopathy (DR) is a microvascular complication of diabetes mellitus. It is characterized by progressive damage to retinal blood vessels.",
         "Non-proliferative diabetic retinopathy (NPDR) is the early stage of DR. Findings include microaneurysms, dot and blot hemorrhages, and hard exudates.",
@@ -443,64 +47,370 @@ def _create_default_knowledge_base() -> list:
         "Regular screening is crucial as early stages of DR are often asymptomatic but treatment can prevent vision loss.",
     ]
 
-def _train_diffusion_minimal(
-    model: LightweightDiffusion,
-    train_df: pd.DataFrame,
-    device: str,
-    epochs: int = 20,
-    conditioning: bool = False
-):
-    """Minimal diffusion model training for laptop.
-    If conditioning is True, use DR grade labels for conditioning during training.
-    """
+
+def _train_diffusion_minimal(model, train_df, device, epochs=20, conditioning=False):
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    
-    image_paths = train_df['image_path'].tolist()[:100]  # Use subset for speed
-    grade_labels = train_df['dr_grade'].tolist()[:100] if conditioning else None
-    
+    image_paths = train_df["image_path"].tolist()[:100]
+    grade_labels = train_df["dr_grade"].tolist()[:100] if conditioning else None
+
     for epoch in range(epochs):
         total_loss = 0.0
         for idx, img_path in enumerate(image_paths):
             try:
                 img = np.load(img_path)
                 img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).to(device)
-                
-                # Sample timestep
                 t = torch.randint(0, model.num_timesteps, (1,), device=device)
-                
-                # Add noise
                 noise = torch.randn_like(img)
                 x_noisy, noise = model.add_noise(img, t, noise)
-                
-                # Prepare conditioning label if needed
                 cond_label = None
                 if conditioning and grade_labels is not None:
                     cond_label = torch.tensor([grade_labels[idx]], dtype=torch.long, device=device)
-                
-                # Predict noise
                 predicted_noise = model(x_noisy, t, labels=cond_label)
-                
                 loss = torch.nn.functional.mse_loss(predicted_noise, noise)
-                
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                
                 total_loss += loss.item()
-            except Exception as e:
+                del img, x_noisy, predicted_noise, loss
+            except Exception:
                 continue
-        
         avg_loss = total_loss / max(len(image_paths), 1)
-        logger.info(f"Diffusion Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
-    
+        logger.info(f"Diffusion Epoch {epoch + 1}/{epochs}, Loss: {avg_loss:.6f}")
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
     model.save_checkpoint("outputs/models/diffusion_unet.pt")
+
+
+def _generate_real_pseudo_metadata(metadata_gen, train_df, validator, repairer, config):
+    records = []
+    for _, row in train_df.iterrows():
+        grade = int(row["dr_grade"])
+        try:
+            recs = metadata_gen.generate_structured(dr_grade=grade, context=None, num_records=1)
+            rec = recs[0] if recs else None
+        except Exception as e:
+            logger.warning(f"Pseudo-metadata generation failed for grade {grade}: {e}")
+            rec = None
+
+        if rec is None:
+            rec = {
+                "patient_id": "P00000", "age": 50, "sex": "M", "dr_grade": grade,
+                "image_quality": 0.5, "left_eye": True,
+                "anatomical_findings": {"microaneurysms": "none", "hemorrhages": "none", "exudates": "none"},
+            }
+        is_valid, _ = validator.validate(rec)
+        if not is_valid and config.schema.repair_enabled:
+            repaired, success = repairer.repair(rec)
+            if success:
+                rec.update(repaired)
+        records.append(rec)
+    logger.info(f"Generated {len(records)} pseudo-metadata records for real images")
+    return records
+
+
+def run_pipeline(config_path: str):
+    config = load_config(config_path)
+    set_seed(config.experiment.seed)
+
+    logger.info(f"Starting SynthMed pipeline: {config.experiment.name}")
+    logger.info(f"Device: {config.experiment.device}")
+
+    # Step 1: Data
+    logger.info("=" * 60)
+    logger.info("Step 1: Data Preparation")
+    logger.info("=" * 60)
+
+    image_files = preprocess_images(
+        config.data.raw_dir, config.data.processed_dir, config.data.image_size
+    )
+    if not image_files:
+        logger.error("No images found.")
+        return None
+
+    image_mapping = {Path(f).stem: f for f in image_files}
+    clinical_df = load_clinical_data(str(Path(config.data.raw_dir) / "clinical.csv"), image_mapping)
+
+    if "image_path" in clinical_df.columns:
+        def convert(p):
+            if pd.isna(p):
+                return p
+            stem = Path(str(p)).stem
+            candidate = Path(config.data.processed_dir) / f"{stem}.npy"
+            return str(candidate) if candidate.exists() else str(p)
+        clinical_df["image_path"] = clinical_df["image_path"].apply(convert)
+
+    if "split" in clinical_df.columns:
+        train_df = clinical_df[clinical_df["split"] == "train"].reset_index(drop=True)
+        test_df = clinical_df[clinical_df["split"] == "test"].reset_index(drop=True)
+    else:
+        n_train = min(config.data.num_real_train, int(len(clinical_df) * 0.7))
+        n_test = min(config.data.num_real_test, len(clinical_df) - n_train)
+        train_df = clinical_df.iloc[:n_train].reset_index(drop=True)
+        test_df = clinical_df.iloc[n_train:n_train + n_test].reset_index(drop=True)
+
+    logger.info(f"Train: {len(train_df)}, Test: {len(test_df)}")
+
+    # Step 2: Schema
+    schema = load_schema(config.schema.schema_path)
+    validator = SchemaValidator(schema)
+    repairer = JSONRepairer(schema, config.schema.repair_max_iterations)
+
+    # Step 3: Retrieval
+    kb_dir = Path(config.data.knowledge_base_dir)
+    documents = []
+    for kb_file in list(kb_dir.glob("*.txt")) + list(kb_dir.glob("*.jsonl")):
+        with open(kb_file, "r") as f:
+            if kb_file.suffix == ".jsonl":
+                for line in f:
+                    documents.append(json.loads(line).get("text", ""))
+            else:
+                documents.append(f.read())
+    if not documents:
+        documents = _default_kb()
+
+    embedder = DocumentEmbedder(config.retrieval.embedder_model)
+    doc_embs = embedder.embed_documents(documents)
+    indexer = FAISSIndexer(embedder.embedding_dim)
+    indexer.add_documents(documents, doc_embs)
+    rag_fusion = RAGFusion(embedder, indexer, config.retrieval.fusion_weights, config.retrieval.top_k)
+
+    # Step 4: Metadata
+    metadata_gen = MetadataGenerator(
+        config.generation.metadata_model,
+        config.experiment.device,
+        config.generation.metadata_max_length,
+        config.generation.temperature,
+    )
+    grounded_gen = GroundedGenerator(metadata_gen, rag_fusion)
+
+    synthetic_records = []
+    if config.data.num_synthetic_metadata > 0:
+        per_grade = config.data.num_synthetic_metadata // 5
+        for grade in range(5):
+            generated = grounded_gen.generate_grounded(
+                dr_grade=grade, num_records=per_grade,
+                use_grounding=config.retrieval.rag_enabled,
+            )
+            for record in generated:
+                is_valid, _ = validator.validate(record)
+                if not is_valid and config.schema.repair_enabled:
+                    repaired, success = repairer.repair(record)
+                    if success:
+                        record.update(repaired)
+                    record["_repaired"] = success
+                record["_valid"] = is_valid or record.get("_repaired", False)
+            synthetic_records.extend(generated)
+        logger.info(f"Generated {len(synthetic_records)} synthetic metadata records")
+        logger.info(f"Schema validity: {validator.validity_rate:.3f}")
+        logger.info(f"Repair success: {repairer.repair_success_rate:.3f}")
+
+    # Step 5: Images
+    synthetic_images = []
+    synthetic_labels = []
+    if config.data.num_synthetic_images > 0:
+        diffusion = LightweightDiffusion(
+            image_size=config.generation.diffusion_image_size,
+            num_timesteps=config.generation.diffusion_timesteps,
+            base_channels=32,
+            num_classes=5,
+        ).to(config.experiment.device)
+
+        _train_diffusion_minimal(
+            diffusion, train_df, config.experiment.device,
+            epochs=config.generation.diffusion_epochs,
+            conditioning=config.generation.conditioning_enabled,
+        )
+
+        per_grade = config.data.num_synthetic_images // 5
+        for grade in range(5):
+            labels_tensor = None
+            if config.generation.conditioning_enabled:
+                labels_tensor = torch.full(
+                    (per_grade,), grade, dtype=torch.long, device=config.experiment.device
+                )
+            generated = diffusion.sample(
+                batch_size=per_grade,
+                device=config.experiment.device,
+                progress=True,
+                labels=labels_tensor,
+                chunk_size=10,
+            )
+            if config.generation.diffusion_image_size != config.data.image_size:
+                generated = diffusion.upscale(generated, config.data.image_size)
+            gen_np = generated.cpu().numpy().transpose(0, 2, 3, 1)
+            for img in gen_np:
+                synthetic_images.append(img)
+                synthetic_labels.append(grade)
+            del generated, gen_np
+            if config.experiment.device.startswith("cuda"):
+                torch.cuda.empty_cache()
+        logger.info(f"Generated {len(synthetic_images)} synthetic images")
+
+        # Save samples for offline FID (no FID computed here)
+        try:
+            fid_dir_real = Path("outputs/fid_samples/real")
+            fid_dir_synth = Path("outputs/fid_samples/synth")
+            fid_dir_real.mkdir(parents=True, exist_ok=True)
+            fid_dir_synth.mkdir(parents=True, exist_ok=True)
+
+            saved_real = 0
+            for p in train_df["image_path"].tolist():
+                if saved_real >= 20:
+                    break
+                try:
+                    arr = np.load(p)
+                except Exception:
+                    continue
+                if arr.ndim != 3 or arr.shape[-1] != 3:
+                    continue
+                np.save(fid_dir_real / f"real_{saved_real:03d}.npy", arr.astype(np.float32))
+                saved_real += 1
+
+            for i, img in enumerate(synthetic_images[:20]):
+                np.save(fid_dir_synth / f"synth_{i:03d}.npy", img.astype(np.float32))
+
+            logger.info(f"Saved {saved_real} real + {min(20, len(synthetic_images))} synthetic samples to outputs/fid_samples/ for offline FID")
+        except Exception as e:
+            logger.warning(f"Failed to save FID samples: {e}")
+
+    # Step 6: Classifier
+    augmentation = get_augmentation_pipeline(strength=config.data.augmentation_strength)
+
+    train_paths = train_df["image_path"].tolist()
+    train_labels = train_df["dr_grade"].tolist()
+    test_paths = test_df["image_path"].tolist()
+    test_labels = test_df["dr_grade"].tolist()
+
+    real_train = DRDataset(
+        image_paths=train_paths, labels=train_labels,
+        transform=augmentation, return_metadata=config.classifier.use_metadata,
+    )
+    test_ds = DRDataset(
+        image_paths=test_paths, labels=test_labels,
+        transform=None, return_metadata=config.classifier.use_metadata,
+    )
+
+    real_pseudo_metadata = []
+    if config.classifier.use_metadata:
+        real_pseudo_metadata = _generate_real_pseudo_metadata(
+            metadata_gen, train_df, validator, repairer, config
+        )
+    else:
+        real_pseudo_metadata = [None] * len(train_df)
+
+    if len(synthetic_images) > 0:
+        if len(synthetic_records) == 0:
+            synthetic_records = [None] * len(synthetic_images)
+        elif len(synthetic_records) < len(synthetic_images):
+            synthetic_records = synthetic_records + [None] * (len(synthetic_images) - len(synthetic_records))
+        else:
+            synthetic_records = synthetic_records[:len(synthetic_images)]
+
+        train_dataset = SyntheticDataset(
+            real_dataset=real_train,
+            real_metadata=real_pseudo_metadata,
+            synthetic_images=synthetic_images,
+            synthetic_labels=synthetic_labels,
+            synthetic_metadata=synthetic_records,
+        )
+    else:
+        train_dataset = real_train
+
+    train_loader = DataLoader(
+        train_dataset, batch_size=config.classifier.batch_size, shuffle=True, num_workers=0
+    )
+    test_loader = DataLoader(
+        test_ds, batch_size=config.classifier.batch_size, shuffle=False, num_workers=0
+    )
+
+    model = DRClassifier(
+        num_classes=config.classifier.num_classes,
+        pretrained=True,
+        use_metadata=config.classifier.use_metadata,
+        metadata_dim=7,
+    )
+    trainer = ClassifierTrainer(
+        model=model,
+        device=config.experiment.device,
+        learning_rate=config.classifier.learning_rate,
+        weight_decay=config.classifier.weight_decay,
+    )
+
+    start_time = time.time()
+    history = trainer.train(
+        train_loader=train_loader,
+        val_loader=test_loader,
+        epochs=config.classifier.epochs,
+        save_dir="outputs/models",
+    )
+    training_time = time.time() - start_time
+
+    # Step 7: Evaluation
+    trainer.model.eval()
+    all_preds, all_labels, all_probs = [], [], []
+    with torch.no_grad():
+        for batch in test_loader:
+            if len(batch) == 3:
+                images, labels, metadata = batch
+                images = images.to(config.experiment.device)
+                metadata = metadata.to(config.experiment.device)
+                labels = labels.to(config.experiment.device)
+                outputs = trainer.model(images, metadata) if config.classifier.use_metadata else trainer.model(images)
+            else:
+                images, labels = batch
+                images = images.to(config.experiment.device)
+                labels = labels.to(config.experiment.device)
+                outputs = trainer.model(images)
+            probs = torch.softmax(outputs, dim=1)
+            preds = outputs.argmax(dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+            all_probs.extend(probs.cpu().numpy())
+
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+    all_probs = np.array(all_probs)
+
+    metrics = compute_all_metrics(
+        all_labels, all_preds, all_probs,
+        schema_validity=validator.validity_rate,
+        repair_success=repairer.repair_success_rate,
+        grounding_score=rag_fusion.mean_grounding_score,
+        experiment_name=config.experiment.name,
+    )
+    metrics.num_synthetic_metadata = config.data.num_synthetic_metadata
+    metrics.num_synthetic_images = config.data.num_synthetic_images
+    metrics.schema_repair_enabled = config.schema.repair_enabled
+    metrics.rag_grounding_enabled = config.retrieval.rag_enabled
+    metrics.train_loss = history["train_loss"]
+    metrics.val_loss = history["val_loss"]
+    metrics.training_time = training_time
+    metrics.fid = -1.0
+
+    Path("outputs/results").mkdir(parents=True, exist_ok=True)
+    with open(f"outputs/results/{config.experiment.name}_metrics.json", "w") as f:
+        json.dump(metrics.to_dict(), f, indent=2, default=str)
+
+    reporter = ResultsReporter()
+    reporter.add_experiment(metrics)
+    reporter.generate_report()
+
+    logger.info("=" * 60)
+    logger.info("Pipeline complete!")
+    logger.info(f"Accuracy: {metrics.accuracy:.4f}")
+    logger.info(f"F1: {metrics.f1_score:.4f}")
+    logger.info(f"ROC-AUC: {metrics.roc_auc:.4f}")
+    logger.info("=" * 60)
+    return metrics
+
 
 def main():
     parser = argparse.ArgumentParser(description="SynthMed Pipeline")
-    parser.add_argument("--config", type=str, default="config/default.yaml", help="Path to configuration file")
+    parser.add_argument("--config", type=str, default="config/default.yaml")
     args = parser.parse_args()
     run_pipeline(args.config)
+
 
 if __name__ == "__main__":
     main()

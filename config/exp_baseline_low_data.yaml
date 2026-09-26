@@ -30,7 +30,7 @@ experiment:
   seed: 42
 generation:
   diffusion_checkpoint: outputs/models/diffusion_unet.pt
-  diffusion_image_size: 32
+  diffusion_image_size: 128
   diffusion_timesteps: 100
   metadata_max_length: 256
   metadata_model: distilgpt2

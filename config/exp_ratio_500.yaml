@@ -25,8 +25,8 @@ evaluation:
   save_results: true
 experiment:
   device: cuda
-  name: A2_synthmed_100real_500syn_seed43
-  seed: 43
+  name: ratio_500
+  seed: 42
 generation:
   conditioning_enabled: false
   diffusion_checkpoint: outputs/models/diffusion_unet.pt

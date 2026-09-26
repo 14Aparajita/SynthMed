@@ -1,4 +1,9 @@
-﻿"""
+# Fix build_final_table.py to include the FID column and rerun
+
+$ErrorActionPreference = "Continue"
+
+$code = @'
+"""
 Assemble the final paper table from real result files.
 """
 
@@ -108,3 +113,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+'@
+
+$code | Out-File -FilePath "scripts/build_final_table.py" -Encoding utf8
+Write-Host "Wrote scripts/build_final_table.py"
+
+Write-Host ""
+python scripts/build_final_table.py

@@ -1,3 +1,4 @@
+
 # ---- Datasets & model checkpoints ----
 data/raw/
 data/processed/
@@ -27,10 +28,6 @@ ENV/
 .coverage
 htmlcov/
 
-# ---- Node (legacy) ----
-node_modules/
-npm-debug.log
-
 # ---- IDE / OS ----
 .vscode/
 .idea/
@@ -50,7 +47,3 @@ Thumbs.db
 # ---- Logs ----
 *.log
 outputs/logs/
-
-# ---- Credentials ----
-kaggle.json
-secrets.json

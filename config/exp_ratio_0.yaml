@@ -12,8 +12,8 @@ data:
   knowledge_base_dir: data/knowledge_base
   num_real_test: 733
   num_real_train: 100
-  num_synthetic_images: 500
-  num_synthetic_metadata: 500
+  num_synthetic_images: 0
+  num_synthetic_metadata: 0
   processed_dir: data/processed
   raw_dir: data/raw
 evaluation:
@@ -25,8 +25,8 @@ evaluation:
   save_results: true
 experiment:
   device: cuda
-  name: A2_synthmed_100real_500syn_seed43
-  seed: 43
+  name: ratio_0
+  seed: 42
 generation:
   conditioning_enabled: false
   diffusion_checkpoint: outputs/models/diffusion_unet.pt
@@ -43,9 +43,9 @@ retrieval:
   - 0.3
   - 0.3
   index_path: outputs/models/faiss_index.bin
-  rag_enabled: true
+  rag_enabled: false
   top_k: 5
 schema:
-  repair_enabled: true
+  repair_enabled: false
   repair_max_iterations: 3
   schema_path: config/schema/clinical_metadata.json

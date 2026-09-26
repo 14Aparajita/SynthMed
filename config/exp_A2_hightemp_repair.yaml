@@ -1,5 +1,5 @@
 experiment:
-  name: "A2_fusion_metadataclassifier"
+  name: "A2_hightemp_repair"
   seed: 42
   device: "cuda"
 
@@ -9,7 +9,7 @@ data:
   knowledge_base_dir: "data/knowledge_base"
   image_size: 128
   num_real_train: 100
-  num_real_test: 100
+  num_real_test: 732
   num_synthetic_metadata: 500
   num_synthetic_images: 500
   augmentation_strength: "default"
@@ -29,7 +29,7 @@ retrieval:
 generation:
   metadata_model: "distilgpt2"
   metadata_max_length: 256
-  temperature: 0.7
+  temperature: 1.2
   diffusion_timesteps: 100
   diffusion_image_size: 128
   diffusion_checkpoint: "outputs/models/diffusion_unet.pt"
@@ -43,7 +43,7 @@ classifier:
   epochs: 50
   learning_rate: 0.0001
   weight_decay: 0.001
-  use_metadata: true
+  use_metadata: false
 
 evaluation:
   metrics: ["accuracy", "f1", "roc_auc"]
